@@ -15,8 +15,10 @@ means a hardening fix lands once and reaches every block that builds a node.
 
 ## What the module renders
 
-The module is one Go package, `github.com/mitstack-eu/k3s-cluster-kit/cluster`.
-Its two entry points render the two things every cluster starts from:
+The module holds two Go packages. `github.com/mitstack-eu/k3s-cluster-kit/cluster`
+renders, and `github.com/mitstack-eu/k3s-cluster-kit/testutil` holds what the
+tests share, as "How you change the module" describes. The `cluster` package's
+two entry points render the two things every cluster starts from:
 
 | Function | What it returns | Where it is defined |
 |---|---|---|
