@@ -1408,7 +1408,6 @@ func TestReportScript_Hardening(t *testing.T) {
 				}
 			}})
 	}
-	const refused = "Error from server (ServiceUnavailable): the server is currently unable to handle the request (get nodes)"
 	cases = append(cases, reportCase{name: "kubelet carries eviction and reservations from the live config of this node", check: func(t *testing.T, r *reportRig) {
 		sameJSON(t, "hardening.kubelet", hardeningOf(t, reportFields(t, r.req))["kubelet"], testFile("want/kubelet.json"))
 		want := "/api/v1/nodes/" + hostNodeName(t) + "/proxy/configz"
