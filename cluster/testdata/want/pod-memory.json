@@ -1,0 +1,16 @@
+{
+  "argocd": [
+    {"name": "argocd-application-controller-0", "timestamp": "2026-10-01T09:44:51Z", "window": "10.512s",
+     "containers": [{"name": "argocd-application-controller", "memory": "212344Ki"}]},
+    {"name": "argocd-server-6d9f7c8b5-x2x7k", "timestamp": "2026-10-01T09:44:53Z", "window": "11.03s",
+     "containers": [{"name": "argocd-server", "memory": "48264Ki"}]}
+  ],
+  "cilium": [
+    {"name": "cilium-x7k2p", "timestamp": "2026-10-01T09:44:50Z", "window": "10.2s",
+     "containers": [{"name": "cilium-agent", "memory": "198432Ki"}]},
+    {"name": "cilium-operator-6f7b9c4d8-m2xkq", "timestamp": "2026-10-01T09:44:52Z", "window": "10.9s",
+     "containers": [{"name": "cilium-operator", "memory": "41220Ki"}]},
+    {"name": "hubble-ui-6b8d7f5c4-r7tn5", "timestamp": "2026-10-01T09:44:52Z", "window": "10.9s",
+     "containers": [{"name": "frontend", "memory": "9876Ki"}, {"name": "backend", "memory": "15432Ki"}]}
+  ]
+}

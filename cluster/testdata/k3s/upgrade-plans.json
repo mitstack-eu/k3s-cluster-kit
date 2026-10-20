@@ -1,0 +1,29 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "metadata": {"resourceVersion": ""},
+  "items": [{
+    "apiVersion": "upgrade.cattle.io/v1",
+    "kind": "Plan",
+    "metadata": {
+      "name": "k3s-server", "namespace": "system-upgrade",
+      "annotations": {"argocd.argoproj.io/sync-options": "SkipDryRunOnMissingResource=true", "mitstack.dev/served": "@SECRET@"}
+    },
+    "spec": {
+      "concurrency": 1, "cordon": true, "serviceAccountName": "system-upgrade",
+      "nodeSelector": {"matchExpressions": [{"key": "node-role.kubernetes.io/control-plane", "operator": "Exists"}]},
+      "upgrade": {"image": "rancher/k3s-upgrade", "envs": [{"name": "UPGRADE_TOKEN", "value": "@SECRET@"}]},
+      "secrets": [{"name": "upgrade-credentials", "path": "/host/run/upgrade", "data": "@SECRET_B64@"}],
+      "channel": "https://update.k3s.io/v1-release/channels/v1.36",
+      "version": "v1.36.5+k3s1",
+      "window": {"days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+                 "startTime": "03:00", "endTime": "05:00", "timeZone": "UTC"}
+    },
+    "status": {
+      "latestVersion": "v1.36.5-k3s1",
+      "latestHash": "4f7c2b9e1d3a5c8e0b6f2a4d9c1e7b3f5a8d0c2e4b6f8a1c3e5d7b9f0a2c4e6",
+      "applying": ["orbitdemo-abcd2345"],
+      "conditions": [{"type": "LatestResolved", "status": "True", "reason": "Version", "lastUpdateTime": "2026-10-08T03:00:11Z"}]
+    }
+  }]
+}

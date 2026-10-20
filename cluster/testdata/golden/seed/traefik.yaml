@@ -1,0 +1,71 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://traefik.github.io/charts
+    chart: traefik
+    targetRevision: 41.6.1
+    helm:
+      releaseName: traefik
+      values: |
+        deployment:
+          kind: Deployment
+          replicas: 1
+        updateStrategy:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
+        ports:
+          web:
+            nodePort: 30080
+            proxyProtocol:
+              trustedIPs: ["10.255.0.254"]
+          websecure:
+            nodePort: 30081
+            proxyProtocol:
+              trustedIPs: ["10.255.0.254"]
+          metrics: null
+        metrics:
+          prometheus: null
+        service:
+          spec:
+            type: NodePort
+            externalTrafficPolicy: Local
+        ingressClass:
+          enabled: true
+          name: traefik
+        podSecurityContext:
+          runAsUser: 65532
+          runAsGroup: 65532
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        providers:
+          kubernetesIngress:
+            publishedService:
+              enabled: false
+            ingressEndpoint:
+              ip: "203.0.113.10"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: traefik
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/enforce-version: latest

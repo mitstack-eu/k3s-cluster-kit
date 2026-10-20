@@ -1,0 +1,221 @@
+#cloud-config
+write_files:
+  - path: /etc/rancher/k3s/config.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      cluster-init: true
+      disable:
+        - local-storage
+        - traefik
+      flannel-backend: none
+      disable-network-policy: true
+      disable-kube-proxy: false
+      cluster-cidr: 10.42.0.0/16
+      service-cidr: 10.43.0.0/16
+      cluster-dns: 10.43.0.10
+      kubelet-arg:
+        - cloud-provider=external
+        - volume-plugin-dir=/var/lib/kubelet/volumeplugins
+        - kube-reserved=cpu=250m,memory=1500Mi,ephemeral-storage=1Gi
+        - system-reserved=cpu=250m,memory=300Mi
+      kube-controller-manager-arg:
+        - flex-volume-plugin-dir=/var/lib/kubelet/volumeplugins
+      kube-apiserver-arg:
+        - service-account-issuer=https://mitstack-oidc-abcdefghijklmnopqrstuvwxyz.s3.eu-central-1.amazonaws.com/ab-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.0z
+        - service-account-jwks-uri=https://mitstack-oidc-abcdefghijklmnopqrstuvwxyz.s3.eu-central-1.amazonaws.com/ab-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.0z/openid/v1/jwks
+      secrets-encryption: true
+  - path: /var/lib/rancher/k3s/server/manifests/cilium.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      apiVersion: helm.cattle.io/v1
+      kind: HelmChart
+      metadata:
+        name: cilium
+        namespace: kube-system
+      spec:
+        chart: cilium
+        repo: https://helm.cilium.io/
+        version: 1.19.3
+        targetNamespace: kube-system
+        bootstrap: true
+        valuesContent: |
+          ipam:
+            mode: kubernetes
+          k8s:
+            requireIPv4PodCIDR: true
+          ipv4:
+            enabled: true
+          ipv6:
+            enabled: false
+          kubeProxyReplacement: false
+          k8sServiceHost: "127.0.0.1"
+          k8sServicePort: "6444"
+          routingMode: "tunnel"
+          rollOutCiliumPods: true
+          endpointRoutes:
+            enabled: true
+          loadBalancer:
+            acceleration: "best-effort"
+          bpf:
+            masquerade: false
+          hubble:
+            relay:
+              enabled: true
+            ui:
+              enabled: true
+          MTU: 1450
+          operator:
+            replicas: 1
+            updateStrategy:
+              rollingUpdate:
+                maxSurge: 0
+                maxUnavailable: 1
+  - path: /var/lib/rancher/k3s/server/manifests/00-argocd-bootstrap.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: argocd
+      ---
+      apiVersion: helm.cattle.io/v1
+      kind: HelmChart
+      metadata:
+        name: argocd
+        namespace: kube-system
+      spec:
+        chart: argo-cd
+        repo: https://argoproj.github.io/argo-helm
+        version: 10.9.7
+        targetNamespace: argocd
+        valuesContent: |
+          dex: {enabled: false}
+          notifications: {cm: {create: false}, secret: {create: false}}
+          configs: {cm: {resource.customizations.health.argoproj.io_Application: 'local h=obj.status and obj.status.health or {} return {status=h.status or "Progressing",message=h.message or ""}'}}
+  - path: /var/lib/rancher/k3s/server/manifests/10-cluster-root.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: cluster-root
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: https://github.com/oooooooooooooooooooooooooooooooooooooo9/r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.-cluster
+          path: cluster
+          targetRevision: HEAD
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: argocd
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+  - path: /etc/mitstack/enrolment.env
+    owner: root:root
+    permissions: "0600"
+    content: |
+      MITSTACK_ENROLMENT_TOKEN=feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface
+      MITSTACK_SUBSCRIPTION_ID=ab-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.b-c_d.0z
+      MITSTACK_REPOSITORY_URL=https://github.com/oooooooooooooooooooooooooooooooooooooo9/r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.r.-cluster
+  - path: /etc/mitstack/metadata-guard.nft
+    owner: root:root
+    permissions: "0600"
+    content: |
+      # Drops pod traffic to the Hetzner metadata service; loaded by mitstack-metadata-guard.service.
+      table inet mitstack_metadata_guard
+      delete table inet mitstack_metadata_guard
+      table inet mitstack_metadata_guard {
+      	chain forward {
+      		type filter hook forward priority -10; policy accept;
+      		ip daddr 169.254.169.254 counter drop
+      	}
+      }
+  - path: /usr/local/sbin/mitstack-hcloud-node
+    owner: root:root
+    permissions: "0700"
+    encoding: gz+b64
+    content: |
+      H4sIAAAAAAAC/3RTXW/bNhR956845bTYckHTStYCVeoCwdIBQde1SLInxzMY8roiLFECSTvt6vz3QYr8kQB7ET/O1bnnXN77yyt5b50MBQsUIWjNKorKqKgWa19Ok5+fr25vbi9+/7T4/PH24vLi9mLx9/WfuShibHIps7fvxqdvfhv3qywo/uvIy00mdzyPzPi6sW5hrD/m+3R2s7i8/vL16q/F5dV1LiRFLb1yuiAvV2dB6tot7bfxD1WVY7NjmSYHNplNRKHLem2Eqw11kWypbDlM8ZMBpIsavLIxRKVXx6E5khHHh5PTNuq7jcjYI5tBBPCen2OOk5MOZEuKuug5VYxUNXGaMeChsCUhP4epGQDYJe5r82OaDPXalxDLcAMhdO0c6SiiraheR5xCiEp97854A54cF1wmGU/PEQtyHSXQeOviEoNfw50bgCdtBt5jnuLaO0y649J2yww86UVyiDLibII5tlu0hQGPBWGXEIH8xmqCow15KBceyJNBkj0lCCVRg9Nuv/OdDIf9Fq+RpSkDTO2IPbKWjPzCmmky7CoG60JUTpOwJn0GHzy1jvYIxxbRQxgMZnlolKZ8PkiZVoFwiIJtSzMYYIvR7NVEvJuP0t7cUUIMDn8MYANcHaHg1hV5q/GEoc15fs4oKM0cxYfar8JefuPtRkUSOyBl/c3CNs9MPD3MLoxjy4BABsJhEOQ/s70ZMR/ZJj+c56O74ax10H7G89Fdeowl8i6TTeuzINWxZWnbpA48OSjhL1+3t1ao1jOuvqJ2UDsz6FVyVq2M9RDNvuPbieJMq4gP+7txrBqO9+8/fvmDtXMjbJM/z86U2ZCPNpBQxngK4WXAvXXm/7DV+p5KikL5b69zBgjwxtcba8gLa6ZPE5tLedQjrNWii6o2mLydTJ5LZdXmhfb9PLP/AgAA//92b6KI6gQAAA==
+  - path: /usr/local/sbin/mitstack-enrol
+    owner: root:root
+    permissions: "0700"
+    encoding: gz+b64
+    content: |
+      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
+  - path: /usr/local/sbin/mitstack-install-k3s
+    owner: root:root
+    permissions: "0700"
+    encoding: gz+b64
+    content: |
+      H4sIAAAAAAAC/4yUa2/bNhSGv/NXnGnabLeVrYt1cQIPcJsMNZo6he1tBbbCoMijiLAkGiSVpGjy3wfZcmAnDrZPMs/l5cuHx/z5p0EqqoHOiUYDDtYko6Lo9uAHAUCWS7BKYbShbO2IShtaFM460Gdgv7Hgt1/9pupeGPDII+Hyriok5W03NQbLjRl7BOAuFwXC2TlwSQAARAasVgU4mV6A42yUNBI649yYje7sA45CLtRh2BT61uv74DiFZNQIWcE/Wz0Ax2GyqpAZx4gSZW3Ad8FxSnq/DcDIbZayNpvagGV7Fli2b52DybFqJRSaWlXgbpeZ2Bv9Gyy7PYsFzg1CCN9O9XmHfbpA3Bw0boN7Ina32/6Et+D1egSAywrJI7lFJbLve4DM1LQY212dUz+MdF3ujD8AvVtD58dGicqA7T12GoWtzW2HBePt4eAbPDxAc59g2QEsPk4cP4ygFLqkhuVngPcbZAY52P47uJEG9gL/dfcBbBVQP4navkUeCaMawe7WFS0RnLIHomF0n0SraNjYLnk07MH5OQF402udmRxhI6oKOawDDamoqPoOQu+q3wGtOJhcaCgpy0WFTepgC6uRQ00ZqUuq1+DGMbmTar3iQo3tbrluOIPDe8QouoGOKsFRGVj2vsjqwOXX6fJpeg9Sg/bUfZ1b0NlO4dlgoOhd/0aYvE5rjYrJymBl+kyWg3WgHSGbz8Dnbpb4GfWzURAw7vtxhkGC3jDxwzBhOIyjUTaMhgdbdODhgUBLhcm64FBJA0++GlANobYDldWOy6uOkbtelowyPorjNPNdyrzQi9IU0ywJYjfNAs5TSsOQU5bQlEaeOwojOmRxwpjrpp3d7Tzb9BSodaAPCO3oPEeisECqUQ/2AoNbrx9E/eAX//060F5T9H8Z7KbkFICdEz8bJXSUJRmGceIP4xGiz8Mhxi71Us+lcRZlfMgoJjxIkAfuKBmGPmcRIo+jNDw4eTuQrde3jVOLtDjAkaCkNODctN8S3DgMXxga1FoNmjer2D6360CTumpe3OlssZxcXa0+BYvVZL6c/j75sFz9Mb86Snz4OJnNLk/GXtZef/48XR6FvszJ4fL9dLa6mM7Hx56OShafpl9WF9d/za6uJxdjo2p8mV4sJ/Ply9yfl/PF9Ho27hwC6xyVXH69/DDWqG5REbzfSHWMofUHrxqC017ghA14vi/R+St/F/JvAAAA//99OnZPCwcAAA==
+  - path: /etc/systemd/system/mitstack-enrol.service
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Enrol this cluster with the mitstack platform
+      Wants=network-online.target
+      After=network-online.target
+      Before=k3s.service
+      ConditionPathExists=!/etc/mitstack/enrolment.json
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/local/sbin/mitstack-enrol
+  - path: /etc/systemd/system/k3s.service.d/10-mitstack-enrolment.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Requires=mitstack-enrol.service
+      After=mitstack-enrol.service
+  - path: /etc/systemd/system/mitstack-metadata-guard.service
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Drop pod traffic to the Hetzner metadata service
+      Before=k3s.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/sbin/nft -f /etc/mitstack/metadata-guard.nft
+
+      [Install]
+      WantedBy=multi-user.target
+  - path: /etc/systemd/system/k3s.service.d/20-mitstack-metadata-guard.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Requires=mitstack-metadata-guard.service
+      After=mitstack-metadata-guard.service
+  - path: /etc/systemd/system/apt-daily-upgrade.timer.d/10-mitstack-maintenance-window.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Timer]
+      OnCalendar=
+      OnCalendar=*-*-* 01:30:00 UTC
+      RandomizedDelaySec=0
+  - path: /etc/apt/apt.conf.d/52mitstack-unattended-upgrades
+    owner: root:root
+    permissions: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      Unattended-Upgrade::Allowed-Origins {
+      	"${distro_id}:${distro_codename}-updates";
+      };
+      Unattended-Upgrade::Automatic-Reboot "false";
+runcmd:
+  - systemctl mask --now ssh.service ssh.socket && systemctl daemon-reload && systemctl enable --now mitstack-metadata-guard.service && /usr/local/sbin/mitstack-hcloud-node && systemctl start mitstack-enrol.service && systemctl enable --now unattended-upgrades.service apt-daily.timer apt-daily-upgrade.timer && systemctl start --no-block apt-daily.service && /usr/local/sbin/mitstack-install-k3s && systemctl enable --now k3s

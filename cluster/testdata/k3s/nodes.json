@@ -1,0 +1,32 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "metadata": {"resourceVersion": ""},
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "Node",
+      "metadata": {
+        "name": "orbitdemo-abcd2345",
+        "labels": {"kubernetes.io/hostname": "orbitdemo-abcd2345", "node-role.kubernetes.io/control-plane": "true"},
+        "annotations": {"k3s.io/node-args": "[\"server\"]"}
+      },
+      "spec": {
+        "podCIDR": "10.42.0.0/24",
+        "providerID": "hcloud://62301001",
+        "taints": [
+          {"key": "node.cloudprovider.kubernetes.io/uninitialized", "value": "true", "effect": "NoSchedule"}
+        ]
+      },
+      "status": {
+        "capacity": {"cpu": "4", "ephemeral-storage": "78425224Ki", "hugepages-1Gi": "0", "hugepages-2Mi": "0", "memory": "7834960Ki", "pods": "110"},
+        "allocatable": {"cpu": "3500m", "ephemeral-storage": "75186357286", "hugepages-1Gi": "0", "hugepages-2Mi": "0", "memory": "5889360Ki", "pods": "110"},
+        "conditions": [
+          {"type": "MemoryPressure", "status": "False", "reason": "KubeletHasSufficientMemory"},
+          {"type": "Ready", "status": "True", "reason": "KubeletReady", "message": "kubelet is posting ready status"}
+        ],
+        "nodeInfo": {"kubeletVersion": "v1.36.3+k3s1", "osImage": "Ubuntu 24.04.3 LTS"}
+      }
+    }
+  ]
+}

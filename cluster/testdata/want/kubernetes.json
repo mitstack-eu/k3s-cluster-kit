@@ -1,0 +1,20 @@
+{
+  "nodes": [
+    {
+      "name": "orbitdemo-abcd2345",
+      "providerID": "hcloud://62301001",
+      "taints": [{"key": "node.cloudprovider.kubernetes.io/uninitialized", "value": "true", "effect": "NoSchedule"}],
+      "kubeletVersion": "v1.36.3+k3s1",
+      "ready": "True",
+      "capacity": {"cpu": "4", "ephemeral-storage": "78425224Ki", "hugepages-1Gi": "0", "hugepages-2Mi": "0", "memory": "7834960Ki", "pods": "110"},
+      "allocatable": {"cpu": "3500m", "ephemeral-storage": "75186357286", "hugepages-1Gi": "0", "hugepages-2Mi": "0", "memory": "5889360Ki", "pods": "110"}
+    }
+  ],
+  "argocdPods": [
+    {"name": "argocd-repo-server-7c9d8f6b5d-4kq2m", "phase": "Pending", "ready": "False",
+     "containers": [{"name": "argocd-repo-server", "image": "quay.io/argoproj/argocd:v3.1.0", "imageID": null}]},
+    {"name": "argocd-server-6d9f7c8b5-x2x7k", "phase": "Running", "ready": "True",
+     "containers": [{"name": "argocd-server", "image": "quay.io/argoproj/argocd:v3.1.0",
+                     "imageID": "quay.io/argoproj/argocd@sha256:5e0c3f9a2b7d41e86c0f9a3b5d7e2c1a4f6b8d0e2c4a6f8b0d2e4c6a8f0b2d4e"}]}
+  ]
+}

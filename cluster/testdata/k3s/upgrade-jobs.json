@@ -1,0 +1,16 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "metadata": {"resourceVersion": ""},
+  "items": [{
+    "metadata": {
+      "name": "apply-k3s-server-on-orbitdemo-abcd2345-with-4f7c2b9e1d3a5", "namespace": "system-upgrade",
+      "creationTimestamp": "2026-10-08T03:00:12Z", "labels": {"upgrade.cattle.io/plan": "k3s-server"}
+    },
+    "spec": {"template": {"spec": {"containers": [{
+      "name": "upgrade", "image": "rancher/k3s-upgrade:v1.36.5-k3s1",
+      "env": [{"name": "SYSTEM_UPGRADE_PLAN_NAME", "value": "k3s-server"}, {"name": "UPGRADE_TOKEN", "value": "@SECRET@"}]
+    }]}}},
+    "status": {"startTime": "2026-10-08T03:00:12Z", "completionTime": "2026-10-08T03:02:40Z", "succeeded": 1}
+  }]
+}

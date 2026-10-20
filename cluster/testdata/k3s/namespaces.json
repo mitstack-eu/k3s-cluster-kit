@@ -1,0 +1,172 @@
+{
+  "apiVersion": "v1",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "Namespace",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "kubernetes.io/metadata.name": "default"
+        },
+        "name": "default"
+      },
+      "spec": {
+        "finalizers": [
+          "kubernetes"
+        ]
+      },
+      "status": {
+        "phase": "Active"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Namespace",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "kubernetes.io/metadata.name": "kube-system"
+        },
+        "name": "kube-system"
+      },
+      "spec": {
+        "finalizers": [
+          "kubernetes"
+        ]
+      },
+      "status": {
+        "phase": "Active"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Namespace",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "kubernetes.io/metadata.name": "argocd"
+        },
+        "name": "argocd"
+      },
+      "spec": {
+        "finalizers": [
+          "kubernetes"
+        ]
+      },
+      "status": {
+        "phase": "Active"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Namespace",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "kubernetes.io/metadata.name": "cert-manager"
+        },
+        "name": "cert-manager"
+      },
+      "spec": {
+        "finalizers": [
+          "kubernetes"
+        ]
+      },
+      "status": {
+        "phase": "Active"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Namespace",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "kubernetes.io/metadata.name": "kube-public",
+          "pod-security.kubernetes.io/enforce": "privileged"
+        },
+        "name": "kube-public"
+      },
+      "spec": {
+        "finalizers": [
+          "kubernetes"
+        ]
+      },
+      "status": {
+        "phase": "Active"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Namespace",
+      "metadata": {
+        "annotations": {
+          "mitstack.dev/served": "@SECRET@"
+        },
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "kubernetes.io/metadata.name": "demo",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a",
+          "pod-security.kubernetes.io/enforce": "restricted",
+          "pod-security.kubernetes.io/enforce-version": "latest",
+          "pod-security.kubernetes.io/warn": "baseline"
+        },
+        "name": "demo"
+      },
+      "spec": {
+        "finalizers": [
+          "kubernetes"
+        ]
+      },
+      "status": {
+        "phase": "Active"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Namespace",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "kubernetes.io/metadata.name": "shop",
+          "mitstack.dev/subscription": "c4d5e6f7-0a1b-4c2d-8e3f-9a0b1c2d3e4f",
+          "pod-security.kubernetes.io/enforce": "baseline"
+        },
+        "name": "shop"
+      },
+      "spec": {
+        "finalizers": [
+          "kubernetes"
+        ]
+      },
+      "status": {
+        "phase": "Active"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Namespace",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "kubernetes.io/metadata.name": "retired",
+          "pod-security.kubernetes.io/audit": "restricted"
+        },
+        "name": "retired"
+      },
+      "spec": {
+        "finalizers": [
+          "kubernetes"
+        ]
+      },
+      "status": {
+        "phase": "Terminating"
+      }
+    }
+  ],
+  "kind": "List",
+  "metadata": {
+    "resourceVersion": ""
+  }
+}

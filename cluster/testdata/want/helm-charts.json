@@ -1,0 +1,5 @@
+[
+  {"name": "cilium", "chart": "cilium", "version": "1.19.3", "jobName": "helm-install-cilium"},
+  {"name": "argocd", "chart": "argo-cd", "version": "10.9.2", "jobName": "helm-install-argocd"},
+  {"name": "pending-chart", "chart": "example", "version": "1.0.0", "jobName": null}
+]

@@ -1,0 +1,19 @@
+# Sealed Secrets, the controller that opens a SealedSecret only inside the
+# cluster holding its private key. It never mints or renews a key of its own,
+# since the cluster block writes the key pair, whose certificate the owner
+# seals against, as the active key before the controller starts.
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: sealed-secrets
+  namespace: kube-system
+spec:
+  chart: sealed-secrets
+  repo: https://bitnami.github.io/sealed-secrets
+  version: 2.20.0
+  targetNamespace: kube-system
+  valuesContent: |
+    fullnameOverride: sealed-secrets-controller
+    keyrenewperiod: "0"
+    image:
+      tag: 0.40.0@sha256:b1ff382e9300dc9e74991f3177b18cafc06ce43b5c21349c86adbdd1d1c177d3

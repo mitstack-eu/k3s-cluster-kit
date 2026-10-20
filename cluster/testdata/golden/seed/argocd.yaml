@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://argoproj.github.io/argo-helm
+    chart: argo-cd
+    targetRevision: 10.9.7
+    helm:
+      releaseName: argocd
+      values: |
+        dex: {enabled: false}
+        notifications: {cm: {create: false}, secret: {create: false}}
+        configs: {cm: {resource.customizations.health.argoproj.io_Application: 'local h=obj.status and obj.status.health or {} return {status=h.status or "Progressing",message=h.message or ""}'}}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

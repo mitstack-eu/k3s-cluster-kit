@@ -1,0 +1,46 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "metadata": {"resourceVersion": ""},
+  "items": [
+    {
+      "apiVersion": "cert-manager.io/v1",
+      "kind": "Certificate",
+      "metadata": {"name": "s4338-a1-tls", "namespace": "app-s4338-a1", "creationTimestamp": "2026-10-08T09:16:02Z"},
+      "spec": {"secretName": "s4338-a1-tls", "dnsNames": ["s4338-a1.apps.mitstack.dev"], "issuerRef": {"name": "letsencrypt-production", "kind": "ClusterIssuer"}},
+      "status": {"conditions": [
+        {"type": "Issuing", "status": "True", "reason": "DoesNotExist", "message": "Issuing certificate as Secret does not exist"},
+        {"type": "Ready", "status": "False", "reason": "DoesNotExist", "message": "Issuing certificate as Secret does not exist"}
+      ]}
+    },
+    {
+      "apiVersion": "cert-manager.io/v1",
+      "kind": "Certificate",
+      "metadata": {"name": "s4338-b2-tls", "namespace": "app-s4338-b2", "creationTimestamp": "2026-10-08T09:16:02Z"},
+      "spec": {"secretName": "s4338-b2-tls", "dnsNames": ["s4338-b2.apps.mitstack.dev"]},
+      "status": {"conditions": [
+        {"type": "Ready", "status": "True", "reason": "Ready", "message": "Certificate is up to date and has not expired"}
+      ]}
+    },
+    {
+      "apiVersion": "cert-manager.io/v1",
+      "kind": "Certificate",
+      "metadata": {"name": "fresh-tls", "namespace": "app-fresh", "creationTimestamp": "2026-10-08T09:16:02Z"},
+      "spec": {"secretName": "fresh-tls"}
+    },
+    {
+      "apiVersion": "cert-manager.io/v1",
+      "kind": "Certificate",
+      "metadata": {"name": "internal-ca", "namespace": "cert-manager", "creationTimestamp": "2026-10-01T09:16:02Z"},
+      "spec": {"secretName": "internal-ca"},
+      "status": {"conditions": [{"type": "Ready", "status": "True", "reason": "Ready", "message": "Certificate is up to date and has not expired"}]}
+    },
+    {
+      "apiVersion": "cert-manager.io/v1",
+      "kind": "Certificate",
+      "metadata": {"name": "web-tls", "namespace": "application-demo", "creationTimestamp": "2026-10-01T09:16:02Z"},
+      "spec": {"secretName": "web-tls"},
+      "status": {"conditions": [{"type": "Ready", "status": "False", "reason": "Failed", "message": "not an app namespace"}]}
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{"checkedAt": "2026-10-08T03:10:00Z", "verdict": "fail", "maxBehindDays": 14,
+ "os": {"running": "Ubuntu 24.04.3 LTS, kernel 6.8.0-71-generic", "latestKernel": "6.8.0-85-generic",
+        "pendingUpgrades": [{"package": "openssl", "installed": "3.0.13-0ubuntu3.5", "candidate": "3.0.13-0ubuntu3.6"}],
+        "rebootRequired": true, "behindSince": "2026-10-07T12:00:00Z", "behindDays": 0, "verdict": "pass"},
+ "k3s": {"running": "v1.36.3+k3s1", "channel": "v1.36", "latest": "v1.36.5+k3s1",
+         "firstNewer": "v1.36.4+k3s1", "firstNewerPublishedAt": "2026-08-27T15:53:55Z", "behindDays": 41, "verdict": "fail"}}

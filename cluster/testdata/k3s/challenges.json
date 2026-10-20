@@ -1,0 +1,28 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "metadata": {"resourceVersion": ""},
+  "items": [
+    {
+      "apiVersion": "acme.cert-manager.io/v1",
+      "kind": "Challenge",
+      "metadata": {"name": "s4338-a1-tls-1-2-3", "namespace": "app-s4338-a1", "creationTimestamp": "2026-10-08T09:16:03Z"},
+      "spec": {"type": "HTTP-01", "dnsName": "s4338-a1.apps.mitstack.dev", "token": "never-reported", "key": "never-reported"},
+      "status": {"state": "pending", "reason": "pods \"cm-acme-http-solver-\" is forbidden: violates policy", "presented": false, "processing": true}
+    },
+    {
+      "apiVersion": "acme.cert-manager.io/v1",
+      "kind": "Challenge",
+      "metadata": {"name": "s4338-b2-tls-4-5-6", "namespace": "app-s4338-b2", "creationTimestamp": "2026-10-08T09:16:03Z"},
+      "spec": {"type": "HTTP-01", "dnsName": "s4338-b2.apps.mitstack.dev"},
+      "status": {"state": "valid", "processing": false}
+    },
+    {
+      "apiVersion": "acme.cert-manager.io/v1",
+      "kind": "Challenge",
+      "metadata": {"name": "internal-1-2-3", "namespace": "cert-manager", "creationTimestamp": "2026-10-01T09:16:03Z"},
+      "spec": {"type": "HTTP-01", "dnsName": "internal.mitstack.dev"},
+      "status": {"state": "pending", "reason": "not an app namespace"}
+    }
+  ]
+}

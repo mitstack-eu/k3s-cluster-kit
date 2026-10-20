@@ -1,0 +1,5 @@
+[
+  {"name": "app-bare", "sourceRepos": []},
+  {"name": "app-shop", "sourceRepos": ["https://github.com/acme/shop"]},
+  {"name": "default", "sourceRepos": ["*"]}
+]

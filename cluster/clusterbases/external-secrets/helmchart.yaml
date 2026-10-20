@@ -1,0 +1,22 @@
+# External Secrets, the controller that copies a value from OpenBao into a
+# Kubernetes Secret, with its CRDs. The controller, its webhook and its
+# certificate controller all run the one image named here by digest.
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: external-secrets
+  namespace: kube-system
+spec:
+  chart: external-secrets
+  repo: https://charts.external-secrets.io
+  version: 2.11.0
+  targetNamespace: external-secrets
+  valuesContent: |
+    image:
+      tag: v2.11.0@sha256:66fb710878cbf3eba4a927e35c5d75e29a202c9bab238aad64bfb23b786b962b
+    webhook:
+      image:
+        tag: v2.11.0@sha256:66fb710878cbf3eba4a927e35c5d75e29a202c9bab238aad64bfb23b786b962b
+    certController:
+      image:
+        tag: v2.11.0@sha256:66fb710878cbf3eba4a927e35c5d75e29a202c9bab238aad64bfb23b786b962b

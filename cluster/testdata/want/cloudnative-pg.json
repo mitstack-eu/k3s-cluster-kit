@@ -1,0 +1,8 @@
+[
+  {"namespace": "app-s4338-pg", "kind": "Cluster", "name": "shared", "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a",
+   "phase": "Cluster in healthy state", "instances": 1, "readyInstances": 1},
+  {"namespace": "app-s4338-pg", "kind": "Database", "name": "plain", "subscription": "0c4f1a2b-3d5e-4f60-8a7b-9c0d1e2f3a4b",
+   "applied": true, "message": null},
+  {"namespace": "app-s4338-pg", "kind": "DatabaseRole", "name": "plain", "subscription": null,
+   "applied": false, "message": "while reconciling the role: secret \"plain-password\" not found"}
+]

@@ -1,0 +1,5 @@
+2026-10-07 01:30:04,512 INFO Starting unattended upgrades script
+2026-10-07 01:30:04,513 INFO Allowed origins are: o=Ubuntu,a=noble, o=Ubuntu,a=noble-security, o=UbuntuESMApps,a=noble-apps-security, o=UbuntuESM,a=noble-infra-security, o=Ubuntu,a=noble-updates
+2026-10-07 01:30:09,882 INFO Packages that will be upgraded: libssl3t64 openssl
+2026-10-07 01:30:09,883 INFO Writing dpkg log to /var/log/unattended-upgrades/unattended-upgrades-dpkg.log
+2026-10-07 01:30:21,104 INFO All upgrades installed

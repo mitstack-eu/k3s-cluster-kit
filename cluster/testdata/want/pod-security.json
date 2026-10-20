@@ -1,0 +1,34 @@
+[
+  {
+    "enforce": null,
+    "name": "default"
+  },
+  {
+    "enforce": null,
+    "name": "kube-system"
+  },
+  {
+    "enforce": null,
+    "name": "argocd"
+  },
+  {
+    "enforce": null,
+    "name": "cert-manager"
+  },
+  {
+    "enforce": "privileged",
+    "name": "kube-public"
+  },
+  {
+    "enforce": "restricted",
+    "name": "demo"
+  },
+  {
+    "enforce": "baseline",
+    "name": "shop"
+  },
+  {
+    "enforce": null,
+    "name": "retired"
+  }
+]

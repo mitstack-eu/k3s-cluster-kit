@@ -1,0 +1,13 @@
+[
+  {"name": "cilium-x7k2p", "phase": "Running", "ready": "True", "containers": [
+    {"name": "cilium-agent", "image": "quay.io/cilium/cilium:v1.19.3", "imageID": "quay.io/cilium/cilium@sha256:1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d"}]},
+  {"name": "cilium-envoy-5d8qz", "phase": "Running", "ready": "True", "containers": [
+    {"name": "cilium-envoy", "image": "quay.io/cilium/cilium-envoy:v1.35.9-1767000000-0123456789abcdef", "imageID": "quay.io/cilium/cilium-envoy@sha256:2b3c4d5e2b3c4d5e2b3c4d5e2b3c4d5e2b3c4d5e2b3c4d5e2b3c4d5e2b3c4d5e"}]},
+  {"name": "cilium-operator-6f7b9c4d8-m2xkq", "phase": "Running", "ready": "True", "containers": [
+    {"name": "cilium-operator", "image": "quay.io/cilium/operator-generic:v1.19.3", "imageID": "quay.io/cilium/operator-generic@sha256:3c4d5e6f3c4d5e6f3c4d5e6f3c4d5e6f3c4d5e6f3c4d5e6f3c4d5e6f3c4d5e6f"}]},
+  {"name": "hubble-relay-7c5f6d9b8-q4wz2", "phase": "Pending", "ready": "False", "containers": [
+    {"name": "hubble-relay", "image": "quay.io/cilium/hubble-relay:v1.19.3", "imageID": null}]},
+  {"name": "hubble-ui-6b8d7f5c4-r7tn5", "phase": "Running", "ready": "True", "containers": [
+    {"name": "frontend", "image": "quay.io/cilium/hubble-ui:v0.13.3", "imageID": "quay.io/cilium/hubble-ui@sha256:5e6f70815e6f70815e6f70815e6f70815e6f70815e6f70815e6f70815e6f7081"},
+    {"name": "backend", "image": "quay.io/cilium/hubble-ui-backend:v0.13.3", "imageID": "quay.io/cilium/hubble-ui-backend@sha256:4d5e6f704d5e6f704d5e6f704d5e6f704d5e6f704d5e6f704d5e6f704d5e6f70"}]}
+]

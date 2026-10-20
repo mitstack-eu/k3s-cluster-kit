@@ -1,0 +1,9 @@
+# The namespace the CloudNativePG operator runs in. Its pod meets the
+# restricted Pod Security Standard, so the namespace enforces it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnpg-system
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest

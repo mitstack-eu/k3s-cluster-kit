@@ -1,0 +1,33 @@
+# OpenBao's data on the node's own disk, at /var/lib/openbao, which the
+# cluster block creates before k3s starts. OpenBao boots before any storage
+# provisioner runs, so its volume is a local one bound to its claim by name,
+# and the class provisions nothing. Retain keeps the data if the claim goes.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openbao-local
+provisioner: kubernetes.io/no-provisioner
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: openbao-data
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: openbao-local
+  claimRef:
+    namespace: openbao
+    name: data-openbao-0
+  local:
+    path: /var/lib/openbao
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node-role.kubernetes.io/control-plane
+              operator: Exists

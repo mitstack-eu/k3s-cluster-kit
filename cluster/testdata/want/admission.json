@@ -1,0 +1,38 @@
+[
+  {
+    "rule": "mitstack-disallow-host-path",
+    "fixture": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: refused-disallow-host-path\n  namespace: mitstack-admission-probe\n",
+    "exitStatus": 1,
+    "message": "Error from server: error when creating \"STDIN\": admission webhook \"vpol.validate.kyverno.svc-fail\" denied the request: policy Deployment/mitstack-admission-probe/refused-disallow-host-path for resource violation: mitstack-disallow-host-path: no volume may mount a host path\n"
+  },
+  {
+    "rule": "mitstack-require-app-label",
+    "fixture": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: refused-require-app-label\n  namespace: mitstack-admission-probe\n",
+    "exitStatus": 1,
+    "message": "Error from server: error when creating \"STDIN\": admission webhook \"vpol.validate.kyverno.svc-fail\" denied the request: policy Deployment/mitstack-admission-probe/refused-require-app-label for resource violation: mitstack-require-app-label: every pod must carry the mitstack.dev/app label\n"
+  },
+  {
+    "rule": "mitstack-require-image-digest",
+    "fixture": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: refused-require-image-digest\n  namespace: mitstack-admission-probe\n",
+    "exitStatus": 1,
+    "message": "Error from server: error when creating \"STDIN\": admission webhook \"vpol.validate.kyverno.svc-fail\" denied the request: policy Deployment/mitstack-admission-probe/refused-require-image-digest for resource violation: mitstack-require-image-digest: every container image must name a sha256 digest\n"
+  },
+  {
+    "rule": "mitstack-require-resource-limits",
+    "fixture": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: refused-require-resource-limits\n  namespace: mitstack-admission-probe\n",
+    "exitStatus": 1,
+    "message": "Error from server: error when creating \"STDIN\": admission webhook \"vpol.validate.kyverno.svc-fail\" denied the request: policy Deployment/mitstack-admission-probe/refused-require-resource-limits for resource violation: mitstack-require-resource-limits: every container must set cpu and memory limits\n"
+  },
+  {
+    "rule": "mitstack-restrict-image-registries",
+    "fixture": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: refused-restrict-image-registries\n  namespace: mitstack-admission-probe\n",
+    "exitStatus": 1,
+    "message": "Error from server: error when creating \"STDIN\": admission webhook \"vpol.validate.kyverno.svc-fail\" denied the request: policy Deployment/mitstack-admission-probe/refused-restrict-image-registries for resource violation: mitstack-restrict-image-registries: every image must come from an allowed registry\n"
+  },
+  {
+    "rule": "pod-security-restricted",
+    "fixture": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: pod-security-restricted\n  namespace: mitstack-admission-probe\n",
+    "exitStatus": 1,
+    "message": "Error from server (Forbidden): error when creating \"STDIN\": pods \"pod-security-restricted\" is forbidden: violates PodSecurity \"restricted:latest\": privileged (container \"app\" must not set securityContext.privileged=true)\n"
+  }
+]

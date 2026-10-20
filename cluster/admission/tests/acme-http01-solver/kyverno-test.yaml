@@ -1,0 +1,168 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: acme-http01-solver
+policies:
+- ../../policies/mitstack-disallow-host-path.yaml
+- ../../policies/mitstack-require-app-label.yaml
+- ../../policies/mitstack-require-image-digest.yaml
+- ../../policies/mitstack-require-resource-limits.yaml
+- ../../policies/mitstack-restrict-image-registries.yaml
+resources:
+- today.yaml
+- admitted.yaml
+- other-digest.yaml
+- tag-and-digest.yaml
+- control.yaml
+variables: values.yaml
+results:
+- isValidatingPolicy: true
+  policy: mitstack-disallow-host-path
+  kind: Pod
+  resources:
+  - acme-http01-solver-today
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-app-label
+  kind: Pod
+  resources:
+  - acme-http01-solver-today
+  result: fail
+- isValidatingPolicy: true
+  policy: mitstack-require-image-digest
+  kind: Pod
+  resources:
+  - acme-http01-solver-today
+  result: fail
+- isValidatingPolicy: true
+  policy: mitstack-require-resource-limits
+  kind: Pod
+  resources:
+  - acme-http01-solver-today
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-restrict-image-registries
+  kind: Pod
+  resources:
+  - acme-http01-solver-today
+  result: fail
+- isValidatingPolicy: true
+  policy: mitstack-disallow-host-path
+  kind: Pod
+  resources:
+  - acme-http01-solver-admitted
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-app-label
+  kind: Pod
+  resources:
+  - acme-http01-solver-admitted
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-image-digest
+  kind: Pod
+  resources:
+  - acme-http01-solver-admitted
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-resource-limits
+  kind: Pod
+  resources:
+  - acme-http01-solver-admitted
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-restrict-image-registries
+  kind: Pod
+  resources:
+  - acme-http01-solver-admitted
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-disallow-host-path
+  kind: Pod
+  resources:
+  - acme-http01-solver-other-digest
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-app-label
+  kind: Pod
+  resources:
+  - acme-http01-solver-other-digest
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-image-digest
+  kind: Pod
+  resources:
+  - acme-http01-solver-other-digest
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-resource-limits
+  kind: Pod
+  resources:
+  - acme-http01-solver-other-digest
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-restrict-image-registries
+  kind: Pod
+  resources:
+  - acme-http01-solver-other-digest
+  result: fail
+- isValidatingPolicy: true
+  policy: mitstack-disallow-host-path
+  kind: Pod
+  resources:
+  - acme-http01-solver-tag-and-digest
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-app-label
+  kind: Pod
+  resources:
+  - acme-http01-solver-tag-and-digest
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-image-digest
+  kind: Pod
+  resources:
+  - acme-http01-solver-tag-and-digest
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-resource-limits
+  kind: Pod
+  resources:
+  - acme-http01-solver-tag-and-digest
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-restrict-image-registries
+  kind: Pod
+  resources:
+  - acme-http01-solver-tag-and-digest
+  result: fail
+- isValidatingPolicy: true
+  policy: mitstack-disallow-host-path
+  kind: Pod
+  resources:
+  - control-in-cert-manager
+  result: skip
+- isValidatingPolicy: true
+  policy: mitstack-require-app-label
+  kind: Pod
+  resources:
+  - control-in-cert-manager
+  result: skip
+- isValidatingPolicy: true
+  policy: mitstack-require-image-digest
+  kind: Pod
+  resources:
+  - control-in-cert-manager
+  result: skip
+- isValidatingPolicy: true
+  policy: mitstack-require-resource-limits
+  kind: Pod
+  resources:
+  - control-in-cert-manager
+  result: skip
+- isValidatingPolicy: true
+  policy: mitstack-restrict-image-registries
+  kind: Pod
+  resources:
+  - control-in-cert-manager
+  result: skip

@@ -1,0 +1,8 @@
+[
+  {"name": "helm-install-cilium", "creationTimestamp": "2026-10-01T09:16:02Z", "startTime": "2026-10-01T09:16:02Z",
+   "completionTime": "2026-10-01T09:17:41Z", "succeeded": 1, "failed": 2,
+   "env": {"NAME": "cilium", "VERSION": "1.19.3", "REPO": "https://helm.cilium.io/", "CHART": "cilium"}},
+  {"name": "helm-install-argocd", "creationTimestamp": "2026-10-01T09:16:03Z", "startTime": "2026-10-01T09:16:03Z",
+   "completionTime": null, "succeeded": null, "failed": null,
+   "env": {"NAME": "argocd", "VERSION": "10.9.2", "REPO": "https://argoproj.github.io/argo-helm", "CHART": "argo-cd"}}
+]

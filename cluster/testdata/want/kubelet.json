@@ -1,0 +1,5 @@
+{
+  "evictionHard": {"imagefs.available": "5%", "memory.available": "100Mi", "nodefs.available": "5%"},
+  "kubeReserved": {"cpu": "250m", "ephemeral-storage": "1Gi", "memory": "1500Mi"},
+  "systemReserved": {"cpu": "250m", "memory": "300Mi"}
+}

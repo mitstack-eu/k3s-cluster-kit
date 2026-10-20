@@ -1,0 +1,26 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "metadata": {"resourceVersion": ""},
+  "items": [
+    {
+      "apiVersion": "helm.cattle.io/v1", "kind": "HelmChart",
+      "metadata": {"name": "cilium", "namespace": "kube-system", "annotations": {"objectset.rio.cattle.io/applied": "@SECRET@"}},
+      "spec": {"chart": "cilium", "repo": "https://helm.cilium.io/", "version": "1.19.3", "targetNamespace": "kube-system",
+        "bootstrap": true, "valuesContent": "ipam:\n  mode: kubernetes\n# @SECRET@\n"},
+      "status": {"jobName": "helm-install-cilium", "conditions": [{"type": "JobCreated", "status": "True"}]}
+    },
+    {
+      "apiVersion": "helm.cattle.io/v1", "kind": "HelmChart",
+      "metadata": {"name": "argocd", "namespace": "kube-system"},
+      "spec": {"chart": "argo-cd", "repo": "https://argoproj.github.io/argo-helm", "version": "10.9.2", "targetNamespace": "argocd",
+        "valuesContent": "dex:\n  enabled: false\n"},
+      "status": {"jobName": "helm-install-argocd"}
+    },
+    {
+      "apiVersion": "helm.cattle.io/v1", "kind": "HelmChart",
+      "metadata": {"name": "pending-chart", "namespace": "kube-system"},
+      "spec": {"chart": "example", "repo": "https://charts.example.com/", "version": "1.0.0"}
+    }
+  ]
+}

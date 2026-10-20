@@ -1,0 +1,97 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: cloudnative-pg
+policies:
+- ../../policies/mitstack-disallow-host-path.yaml
+- ../../policies/mitstack-require-app-label.yaml
+- ../../policies/mitstack-require-image-digest.yaml
+- ../../policies/mitstack-require-resource-limits.yaml
+- ../../policies/mitstack-restrict-image-registries.yaml
+resources:
+- operator.yaml
+- instance.yaml
+- tagged.yaml
+- unpinned.yaml
+variables: values.yaml
+results:
+- isValidatingPolicy: true
+  policy: mitstack-disallow-host-path
+  kind: Pod
+  resources:
+  - cloudnative-pg-instance
+  - cloudnative-pg-instance-tagged
+  - cloudnative-pg-instance-unpinned
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-app-label
+  kind: Pod
+  resources:
+  - cloudnative-pg-instance
+  - cloudnative-pg-instance-tagged
+  - cloudnative-pg-instance-unpinned
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-image-digest
+  kind: Pod
+  resources:
+  - cloudnative-pg-instance
+  - cloudnative-pg-instance-unpinned
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-image-digest
+  kind: Pod
+  resources:
+  - cloudnative-pg-instance-tagged
+  result: fail
+- isValidatingPolicy: true
+  policy: mitstack-require-resource-limits
+  kind: Pod
+  resources:
+  - cloudnative-pg-instance
+  - cloudnative-pg-instance-tagged
+  - cloudnative-pg-instance-unpinned
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-restrict-image-registries
+  kind: Pod
+  resources:
+  - cloudnative-pg-instance
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-restrict-image-registries
+  kind: Pod
+  resources:
+  - cloudnative-pg-instance-tagged
+  - cloudnative-pg-instance-unpinned
+  result: fail
+- isValidatingPolicy: true
+  policy: mitstack-disallow-host-path
+  kind: Pod
+  resources:
+  - cloudnative-pg-operator
+  result: skip
+- isValidatingPolicy: true
+  policy: mitstack-require-app-label
+  kind: Pod
+  resources:
+  - cloudnative-pg-operator
+  result: skip
+- isValidatingPolicy: true
+  policy: mitstack-require-image-digest
+  kind: Pod
+  resources:
+  - cloudnative-pg-operator
+  result: skip
+- isValidatingPolicy: true
+  policy: mitstack-require-resource-limits
+  kind: Pod
+  resources:
+  - cloudnative-pg-operator
+  result: skip
+- isValidatingPolicy: true
+  policy: mitstack-restrict-image-registries
+  kind: Pod
+  resources:
+  - cloudnative-pg-operator
+  result: skip

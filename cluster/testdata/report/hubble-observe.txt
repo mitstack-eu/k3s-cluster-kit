@@ -1,0 +1,2 @@
+Oct  4 09:44:50.101: kube-system/coredns-6f8b9d7c5d-2xk7p:53 (ID:12345) <> argocd/argocd-repo-server-7c9d8f6b5d-4kq2m:41234 (ID:23456) to-endpoint FORWARDED (UDP)
+Oct  4 09:44:50.312: argocd/argocd-repo-server-7c9d8f6b5d-4kq2m:52110 (ID:23456) -> 140.82.121.4:443 (world) to-stack FORWARDED (TCP Flags: SYN)

@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudnative-pg
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+    mitstack.dev/cluster-bases-tag: v0.5.0
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/acme/orbitdemo-cluster
+    path: cluster-bases/cloudnative-pg
+    targetRevision: HEAD
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cnpg-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

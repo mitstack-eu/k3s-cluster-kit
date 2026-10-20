@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: accepted-restrict-image-registries
+  namespace: mitstack-admission-probe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: accepted-restrict-image-registries
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: accepted-restrict-image-registries
+        mitstack.dev/app: probe
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: app
+        image: ghcr.io/mitstack-eu/probe@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+        resources:
+          limits:
+            cpu: 100m
+            memory: 64Mi

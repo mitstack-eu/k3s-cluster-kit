@@ -1,0 +1,25 @@
+# trust-manager, which copies the certificate of OpenBao's authority into the
+# ConfigMap openbao-ca in every namespace, so each client of OpenBao verifies
+# the server against it. It reads Secrets only in its trust namespace, openbao,
+# where cert-manager keeps that authority, and ships no public CA bundle.
+# Its webhook takes its own certificate from cert-manager.
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: trust-manager
+  namespace: kube-system
+spec:
+  chart: trust-manager
+  repo: https://charts.jetstack.io
+  version: v0.25.0
+  targetNamespace: cert-manager
+  valuesContent: |
+    crds:
+      enabled: true
+    image:
+      tag: v0.25.0@sha256:0521921c2a46d14d0417336b20bcde69215ef3164f2977cc939d53c6e5224a17
+    defaultPackage:
+      enabled: false
+    app:
+      trust:
+        namespace: openbao

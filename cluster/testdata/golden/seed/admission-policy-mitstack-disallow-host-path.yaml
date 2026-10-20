@@ -1,0 +1,26 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: mitstack-disallow-host-path
+  annotations:
+    mitstack.dev/standard: Pod Security Standards baseline HostPath Volumes
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, daemonsets, jobs, cronjobs, replicasets]
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["pods"]
+    namespaceSelector:
+      matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: NotIn
+        values: [kube-system, kube-public, kube-node-lease, argocd, kyverno, traefik, cert-manager, system-upgrade, mitstack-metadata-probe, openbao, external-secrets, cnpg-system]
+  validations:
+  - expression: "!object.spec.?volumes.orValue([]).exists(v, has(v.hostPath))"
+    message: "mitstack-disallow-host-path: no volume may mount a host path, since a host path reaches the node's file system"

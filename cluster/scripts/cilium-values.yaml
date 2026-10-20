@@ -1,0 +1,31 @@
+ipam:
+  mode: kubernetes
+k8s:
+  requireIPv4PodCIDR: true
+ipv4:
+  enabled: true
+ipv6:
+  enabled: false
+kubeProxyReplacement: false
+k8sServiceHost: "127.0.0.1"
+k8sServicePort: "6444"
+routingMode: "tunnel"
+rollOutCiliumPods: true
+endpointRoutes:
+  enabled: true
+loadBalancer:
+  acceleration: "best-effort"
+bpf:
+  masquerade: false
+hubble:
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+MTU: 1450
+operator:
+  replicas: 1
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1

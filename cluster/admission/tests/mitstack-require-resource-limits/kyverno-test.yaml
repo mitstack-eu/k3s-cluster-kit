@@ -1,0 +1,22 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: mitstack-require-resource-limits
+policies:
+- ../../policies/mitstack-require-resource-limits.yaml
+resources:
+- accepted.yaml
+- refused.yaml
+results:
+- isValidatingPolicy: true
+  policy: mitstack-require-resource-limits
+  kind: Deployment
+  resources:
+  - accepted-require-resource-limits
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-resource-limits
+  kind: Deployment
+  resources:
+  - refused-require-resource-limits
+  result: fail

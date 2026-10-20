@@ -1,0 +1,23 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: mitstack-verify-node-agent-signature
+policies:
+- ../../policies/mitstack-verify-node-agent-signature.yaml
+resources:
+- accepted.yaml
+- refused.yaml
+- other-identity.yaml
+variables: values.yaml
+results:
+- policy: mitstack-verify-node-agent-signature
+  kind: Pod
+  resources:
+  - accepted-verify-node-agent-signature
+  result: pass
+- policy: mitstack-verify-node-agent-signature
+  kind: Pod
+  resources:
+  - refused-verify-node-agent-signature
+  - other-identity-verify-node-agent-signature
+  result: fail

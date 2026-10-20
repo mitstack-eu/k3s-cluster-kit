@@ -1,0 +1,11 @@
+KVStore:                 Disabled
+Kubernetes:              Ok         1.36 (v1.36.3+k3s1) [linux/amd64]
+KubeProxyReplacement:    False
+Host firewall:           Disabled
+Cilium:                  Ok   1.19.3 (v1.19.3-5f1e4c2b)
+NodeMonitor:             Listening for events on 4 CPUs with 64x4096 of shared memory
+Cilium health daemon:    Ok
+IPAM:                    IPv4: 14/254 allocated from 10.42.0.0/24,
+Routing:                 Network: Tunnel [vxlan]   Host: Legacy
+Hubble:                  Ok              Current/Max Flows: 4095/4095 (100.00%), Flows/s: 12.31
+Cluster health:          1/1 reachable   (2026-10-04T09:44:51Z)

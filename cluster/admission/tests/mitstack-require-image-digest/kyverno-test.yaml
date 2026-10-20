@@ -1,0 +1,22 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: mitstack-require-image-digest
+policies:
+- ../../policies/mitstack-require-image-digest.yaml
+resources:
+- accepted.yaml
+- refused.yaml
+results:
+- isValidatingPolicy: true
+  policy: mitstack-require-image-digest
+  kind: Deployment
+  resources:
+  - accepted-require-image-digest
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-image-digest
+  kind: Deployment
+  resources:
+  - refused-require-image-digest
+  result: fail

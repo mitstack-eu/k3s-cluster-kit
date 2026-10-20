@@ -1,0 +1,5 @@
+time="2026-10-08T02:00:41Z" level=info msg="Reboot required"
+time="2026-10-08T02:00:41Z" level=info msg="Acquired reboot lock"
+time="2026-10-08T02:00:41Z" level=info msg="Draining node orbitdemo-abcd2345"
+time="2026-10-08T02:01:12Z" level=info msg="Running command: [/usr/bin/nsenter -m/proc/1/ns/mnt -- /bin/systemctl reboot] for node: orbitdemo-abcd2345"
+time="2026-10-08T02:01:12Z" level=info msg="Commanding reboot for node: orbitdemo-abcd2345"

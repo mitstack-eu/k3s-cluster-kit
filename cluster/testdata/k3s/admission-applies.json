@@ -1,0 +1,32 @@
+{
+  "mitstack-disallow-host-path": {
+    "stdout": "",
+    "stderr": "Error from server: error when creating \"STDIN\": admission webhook \"vpol.validate.kyverno.svc-fail\" denied the request: policy Deployment/mitstack-admission-probe/refused-disallow-host-path for resource violation: mitstack-disallow-host-path: no volume may mount a host path\n",
+    "exit": 1
+  },
+  "mitstack-require-app-label": {
+    "stdout": "",
+    "stderr": "Error from server: error when creating \"STDIN\": admission webhook \"vpol.validate.kyverno.svc-fail\" denied the request: policy Deployment/mitstack-admission-probe/refused-require-app-label for resource violation: mitstack-require-app-label: every pod must carry the mitstack.dev/app label\n",
+    "exit": 1
+  },
+  "mitstack-require-image-digest": {
+    "stdout": "",
+    "stderr": "Error from server: error when creating \"STDIN\": admission webhook \"vpol.validate.kyverno.svc-fail\" denied the request: policy Deployment/mitstack-admission-probe/refused-require-image-digest for resource violation: mitstack-require-image-digest: every container image must name a sha256 digest\n",
+    "exit": 1
+  },
+  "mitstack-require-resource-limits": {
+    "stdout": "",
+    "stderr": "Error from server: error when creating \"STDIN\": admission webhook \"vpol.validate.kyverno.svc-fail\" denied the request: policy Deployment/mitstack-admission-probe/refused-require-resource-limits for resource violation: mitstack-require-resource-limits: every container must set cpu and memory limits\n",
+    "exit": 1
+  },
+  "mitstack-restrict-image-registries": {
+    "stdout": "",
+    "stderr": "Error from server: error when creating \"STDIN\": admission webhook \"vpol.validate.kyverno.svc-fail\" denied the request: policy Deployment/mitstack-admission-probe/refused-restrict-image-registries for resource violation: mitstack-restrict-image-registries: every image must come from an allowed registry\n",
+    "exit": 1
+  },
+  "pod-security-restricted": {
+    "stdout": "",
+    "stderr": "Error from server (Forbidden): error when creating \"STDIN\": pods \"pod-security-restricted\" is forbidden: violates PodSecurity \"restricted:latest\": privileged (container \"app\" must not set securityContext.privileged=true)\n",
+    "exit": 1
+  }
+}

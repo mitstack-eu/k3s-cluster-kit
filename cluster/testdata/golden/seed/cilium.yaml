@@ -1,0 +1,78 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cilium
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://helm.cilium.io/
+    chart: cilium
+    targetRevision: 1.19.3
+    helm:
+      releaseName: cilium
+      values: |
+        ipam:
+          mode: kubernetes
+        k8s:
+          requireIPv4PodCIDR: true
+        ipv4:
+          enabled: true
+        ipv6:
+          enabled: false
+        kubeProxyReplacement: false
+        k8sServiceHost: "127.0.0.1"
+        k8sServicePort: "6444"
+        routingMode: "tunnel"
+        rollOutCiliumPods: true
+        endpointRoutes:
+          enabled: true
+        loadBalancer:
+          acceleration: "best-effort"
+        bpf:
+          masquerade: false
+        hubble:
+          relay:
+            enabled: true
+          ui:
+            enabled: true
+        MTU: 1450
+        operator:
+          replicas: 1
+          updateStrategy:
+            rollingUpdate:
+              maxSurge: 0
+              maxUnavailable: 1
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    - group: ""
+      kind: Secret
+      name: cilium-ca
+      namespace: kube-system
+      jsonPointers:
+        - /data/ca.crt
+        - /data/ca.key
+    - group: ""
+      kind: Secret
+      name: hubble-relay-client-certs
+      namespace: kube-system
+      jsonPointers:
+        - /data/ca.crt
+        - /data/tls.crt
+        - /data/tls.key
+    - group: ""
+      kind: Secret
+      name: hubble-server-certs
+      namespace: kube-system
+      jsonPointers:
+        - /data/ca.crt
+        - /data/tls.crt
+        - /data/tls.key

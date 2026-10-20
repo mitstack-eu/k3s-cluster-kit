@@ -1,0 +1,17 @@
+{
+  "kind": "PodMetricsList", "apiVersion": "metrics.k8s.io/v1beta1", "metadata": {},
+  "items": [
+    {"metadata": {"name": "cilium-x7k2p", "namespace": "kube-system", "labels": {"app.kubernetes.io/part-of": "cilium", "k8s-app": "cilium"}},
+     "timestamp": "2026-10-01T09:44:50Z", "window": "10.2s",
+     "containers": [{"name": "cilium-agent", "usage": {"cpu": "41245112n", "memory": "198432Ki"}}]},
+    {"metadata": {"name": "coredns-7b98449c4-9xk2w", "namespace": "kube-system", "labels": {"k8s-app": "kube-dns"}},
+     "timestamp": "2026-10-01T09:44:50Z", "window": "10.2s",
+     "containers": [{"name": "coredns", "usage": {"cpu": "3245112n", "memory": "17012Ki"}}]},
+    {"metadata": {"name": "cilium-operator-6f7b9c4d8-m2xkq", "namespace": "kube-system", "labels": {"app.kubernetes.io/part-of": "cilium"}},
+     "timestamp": "2026-10-01T09:44:52Z", "window": "10.9s",
+     "containers": [{"name": "cilium-operator", "usage": {"cpu": "2245112n", "memory": "41220Ki"}}]},
+    {"metadata": {"name": "hubble-ui-6b8d7f5c4-r7tn5", "namespace": "kube-system", "labels": {"app.kubernetes.io/part-of": "cilium"}},
+     "timestamp": "2026-10-01T09:44:52Z", "window": "10.9s",
+     "containers": [{"name": "frontend", "usage": {"cpu": "45112n", "memory": "9876Ki"}}, {"name": "backend", "usage": {"cpu": "145112n", "memory": "15432Ki"}}]}
+  ]
+}

@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cloudnative-pg-instance-tagged
+  namespace: app-s4338-pg
+  labels:
+    cnpg.io/cluster: shared
+    cnpg.io/instanceName: shared-1
+    cnpg.io/podRole: instance
+    role: primary
+    mitstack.dev/app: postgres
+spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  initContainers:
+  - name: bootstrap-controller
+    image: ghcr.io/cloudnative-pg/cloudnative-pg:1.30.1
+    command: [/manager, bootstrap, /controller/manager]
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+    volumeMounts:
+    - name: scratch-data
+      mountPath: /controller
+  containers:
+  - name: postgres
+    image: ghcr.io/cloudnative-pg/postgresql:16.15-system-trixie
+    command: [/controller/manager, instance, run]
+    ports:
+    - containerPort: 5432
+      name: postgresql
+    - containerPort: 8000
+      name: status
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: [ALL]
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+    volumeMounts:
+    - name: pgdata
+      mountPath: /var/lib/postgresql/data
+    - name: scratch-data
+      mountPath: /controller
+  volumes:
+  - name: pgdata
+    persistentVolumeClaim:
+      claimName: shared-1
+  - name: scratch-data
+    emptyDir: {}

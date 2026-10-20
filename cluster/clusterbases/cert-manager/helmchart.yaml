@@ -1,0 +1,32 @@
+# cert-manager, which issues and renews certificates inside the cluster, with
+# its CRDs: OpenBao's serving certificate from the authority in
+# openbao/tls.yaml, and each app's Let's Encrypt certificate. The HTTP-01
+# solver's image is named by digest alone, since the cluster's admission policy
+# admits it only by that exact reference.
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: cert-manager
+  namespace: kube-system
+spec:
+  chart: cert-manager
+  repo: https://charts.jetstack.io
+  version: v1.21.2
+  targetNamespace: cert-manager
+  valuesContent: |
+    crds:
+      enabled: true
+    image:
+      tag: v1.21.2@sha256:70f532fd9cfde0b09d55687200942399d89838bc2d5d5b45152eb799a15912b8
+    webhook:
+      image:
+        tag: v1.21.2@sha256:a60e2dac46dbb8a7f3df95c54ce941012f54c2fe022f0ee55aaa1ab40ed957ae
+    cainjector:
+      image:
+        tag: v1.21.2@sha256:c85268c64f2e0e76684bf5fe8906caff34b82523561c6affe0fae3546bd87562
+    startupapicheck:
+      image:
+        tag: v1.21.2@sha256:46e75b6866359ffb5d82624f41e3ed1c70b2994982702ced547ce5edb418a8f5
+    acmesolver:
+      image:
+        digest: sha256:699b40d622211ab7accad8a21b04c5fbaa1841ef7a12621e8de492dbe27b2503

@@ -1,0 +1,7 @@
+{"kubeletconfig": {"enableServer": true, "staticPodPath": "/var/lib/rancher/k3s/agent/pod-manifests",
+ "address": "0.0.0.0", "port": 10250, "authentication": {"x509": {"clientCAFile": "/var/lib/rancher/k3s/agent/client-ca.crt"}},
+ "evictionHard": {"imagefs.available": "5%", "memory.available": "100Mi", "nodefs.available": "5%"},
+ "evictionPressureTransitionPeriod": "5m0s",
+ "kubeReserved": {"cpu": "250m", "ephemeral-storage": "1Gi", "memory": "1500Mi"},
+ "systemReserved": {"cpu": "250m", "memory": "300Mi"},
+ "enforceNodeAllocatable": ["pods"]}}

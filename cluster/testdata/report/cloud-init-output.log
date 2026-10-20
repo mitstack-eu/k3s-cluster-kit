@@ -1,0 +1,4 @@
+Cloud-init v. 25.1.4-0ubuntu0~24.04.1 running 'modules:final' at Wed, 01 Oct 2026 09:13:58 +0000. Up 21.40 seconds.
+mitstack-install-k3s: the k3s installer matches SHA-256 ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b
+mitstack-install-k3s: the k3s binary v1.36.3+k3s1 matches SHA-256 2f98a9f8fe5782479ee2d54e70a1b10a7f6fd4cae8d38ed3098452dc6eed76b5
+Cloud-init v. 25.1.4-0ubuntu0~24.04.1 finished at Wed, 01 Oct 2026 09:15:52 +0000. Up 135.07 seconds
