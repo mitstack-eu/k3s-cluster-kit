@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mitstack-eu/k3s-cluster-kit/testutil"
 )
 
 const (
@@ -35,7 +37,7 @@ const (
 
 var (
 	wantKubeBenchArgs = []string{"run", "--config-dir", "", "--benchmark", pinnedProfile, "--targets", "master,etcd,controlplane,node,policies", "--json"}
-	scanTimeShape     = madeAtShape
+	scanTimeShape     = testutil.MadeAtShape
 )
 
 type kubeBenchSummary struct {
@@ -88,7 +90,7 @@ type scanRig struct {
 	t         *testing.T
 	state     string
 	k3sOpts   []fakeK3sOption
-	kubeBench fakeTool
+	kubeBench testutil.FakeTool
 	kubescape string // the directory of the fake kubescape and the framework files beside it
 	env       []string
 	out       string
@@ -98,7 +100,7 @@ type scanRig struct {
 func newScanRig(t *testing.T) *scanRig {
 	t.Helper()
 	r := &scanRig{t: t, state: t.TempDir()}
-	r.kubeBench = newFakeTool(t, "kube-bench", testFile("scan/kube-bench.json"), "", 0)
+	r.kubeBench = testutil.NewFakeTool(t, "kube-bench", testFile("scan/kube-bench.json"), "", 0)
 	r.kubescape = fakeKubescape(t, testFile("scan/kubescape.json"))
 	return r
 }
@@ -106,17 +108,17 @@ func newScanRig(t *testing.T) *scanRig {
 func fakeKubescape(t *testing.T, report string) string {
 	t.Helper()
 	dir := t.TempDir()
-	writeIn(t, dir, "kubescape", testFile("fakes/kubescape.sh"), 0o755)
-	writeIn(t, dir, "report.json", report, 0o600)
-	writeIn(t, dir, "nsa", `{"name": "NSA", "controls": []}`, 0o600)
-	writeIn(t, dir, "default_config_inputs", testFile("scan/default_config_inputs"), 0o600)
+	testutil.WriteIn(t, dir, "kubescape", testFile("fakes/kubescape.sh"), 0o755)
+	testutil.WriteIn(t, dir, "report.json", report, 0o600)
+	testutil.WriteIn(t, dir, "nsa", `{"name": "NSA", "controls": []}`, 0o600)
+	testutil.WriteIn(t, dir, "default_config_inputs", testFile("scan/default_config_inputs"), 0o600)
 	return dir
 }
 
 func failKubescape(t *testing.T, dir, stderr string, exit int) {
 	t.Helper()
-	writeIn(t, dir, "stderr", stderr, 0o600)
-	writeIn(t, dir, "exit", fmt.Sprint(exit), 0o600)
+	testutil.WriteIn(t, dir, "stderr", stderr, 0o600)
+	testutil.WriteIn(t, dir, "exit", fmt.Sprint(exit), 0o600)
 }
 
 func (r *scanRig) run() *scanRig {
@@ -124,10 +126,10 @@ func (r *scanRig) run() *scanRig {
 	t.Helper()
 	k := newFakeK3s(t, r.k3sOpts...)
 	env := append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + t.TempDir(), "TMPDIR=" + t.TempDir(),
-		reportStateDirEnv + "=" + r.state, reportK3sEnv + "=" + k.path, scanKubeconfigEnv + "=" + filepath.Join(t.TempDir(), "k3s.yaml"),
-		scanKubeBenchEnv + "=" + r.kubeBench.path, scanKubescapeEnv + "=" + filepath.Join(r.kubescape, "kubescape"),
+		testutil.ReportStateDirEnv + "=" + r.state, testutil.ReportK3sEnv + "=" + k.path, scanKubeconfigEnv + "=" + filepath.Join(t.TempDir(), "k3s.yaml"),
+		scanKubeBenchEnv + "=" + r.kubeBench.Path, scanKubescapeEnv + "=" + filepath.Join(r.kubescape, "kubescape"),
 		scanURLEnv + "=" + closedHTTPURL(t) + "/", scanRawURLEnv + "=" + closedHTTPURL(t) + "/"}, r.env...)
-	script := writeTemp(t, "mitstack-scan.py", testRepoFile(t, "scripts/mitstack-scan.py"))
+	script := testutil.WriteTemp(t, "mitstack-scan.py", testutil.TestRepoFile(t, "scripts/mitstack-scan.py"))
 	cmd := exec.Command("python3", "-I", script)
 	cmd.Env = env
 	done := make(chan struct{})
@@ -152,25 +154,25 @@ func (r *scanRig) summaryFile(name string) (string, bool) {
 	if os.IsNotExist(err) {
 		return "", false
 	}
-	fatalIf(r.t, err != nil, "reading %s: %v", name, err)
+	testutil.FatalIf(r.t, err != nil, "reading %s: %v", name, err)
 	return string(raw), true
 }
 
 func (r *scanRig) kubeBenchSummary() kubeBenchSummary {
 	r.t.Helper()
 	raw, ok := r.summaryFile(kubeBenchSummaryFile)
-	fatalIf(r.t, !ok, "the scan kept no %s; output:\n%s", kubeBenchSummaryFile, r.out)
+	testutil.FatalIf(r.t, !ok, "the scan kept no %s; output:\n%s", kubeBenchSummaryFile, r.out)
 	var s kubeBenchSummary
-	fatalIf(r.t, json.Unmarshal([]byte(raw), &s) != nil, "%s is not the summary JSON: %s", kubeBenchSummaryFile, truncate(raw, 400))
+	testutil.FatalIf(r.t, json.Unmarshal([]byte(raw), &s) != nil, "%s is not the summary JSON: %s", kubeBenchSummaryFile, testutil.Truncate(raw, 400))
 	return s
 }
 
 func (r *scanRig) kubescapeSummary() kubescapeSummary {
 	r.t.Helper()
 	raw, ok := r.summaryFile(kubescapeSummaryFile)
-	fatalIf(r.t, !ok, "the scan kept no %s; output:\n%s", kubescapeSummaryFile, r.out)
+	testutil.FatalIf(r.t, !ok, "the scan kept no %s; output:\n%s", kubescapeSummaryFile, r.out)
 	var s kubescapeSummary
-	fatalIf(r.t, json.Unmarshal([]byte(raw), &s) != nil, "%s is not the summary JSON: %s", kubescapeSummaryFile, truncate(raw, 400))
+	testutil.FatalIf(r.t, json.Unmarshal([]byte(raw), &s) != nil, "%s is not the summary JSON: %s", kubescapeSummaryFile, testutil.Truncate(raw, 400))
 	return s
 }
 
@@ -180,7 +182,7 @@ func (r *scanRig) kubescapeArgs() []string {
 	if os.IsNotExist(err) {
 		return nil
 	}
-	fatalIf(r.t, err != nil, "reading the fake kubescape's arguments: %v", err)
+	testutil.FatalIf(r.t, err != nil, "reading the fake kubescape's arguments: %v", err)
 	return strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
 }
 
@@ -199,7 +201,7 @@ func cannedBenchFailures(t *testing.T, raw string) []benchFailure {
 			} `json:"tests"`
 		} `json:"Controls"`
 	}
-	fatalIf(t, json.Unmarshal([]byte(raw), &out) != nil, "the canned kube-bench output is not JSON")
+	testutil.FatalIf(t, json.Unmarshal([]byte(raw), &out) != nil, "the canned kube-bench output is not JSON")
 	var failed []benchFailure
 	for _, c := range out.Controls {
 		for _, g := range c.Tests {
@@ -216,36 +218,36 @@ func cannedBenchFailures(t *testing.T, raw string) []benchFailure {
 func assertScanTimes(t *testing.T, what, started, finished string, before, after time.Time) {
 	t.Helper()
 	for _, v := range []string{started, finished} {
-		fatalIf(t, !scanTimeShape.MatchString(v), "%s carries the time %q, want UTC to the second", what, v)
+		testutil.FatalIf(t, !scanTimeShape.MatchString(v), "%s carries the time %q, want UTC to the second", what, v)
 		at, _ := time.Parse(time.RFC3339, v)
-		failIf(t, at.Before(before.Truncate(time.Second)) || at.After(after), "%s carries %s, want a time inside the run %s to %s", what, v, before.Format(time.RFC3339), after.Format(time.RFC3339))
+		testutil.FailIf(t, at.Before(before.Truncate(time.Second)) || at.After(after), "%s carries %s, want a time inside the run %s to %s", what, v, before.Format(time.RFC3339), after.Format(time.RFC3339))
 	}
-	failIf(t, finished < started, "%s finished at %s, before it started at %s", what, finished, started)
+	testutil.FailIf(t, finished < started, "%s finished at %s, before it started at %s", what, finished, started)
 }
 
 func TestScanScript_KubeBenchRunsTheNamedK3sProfileAndKeepsEveryFailedCheck(t *testing.T) {
 	before := time.Now().UTC()
 	r := newScanRig(t).run()
 	after := time.Now().UTC()
-	fatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
+	testutil.FatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
 
-	runs := r.kubeBench.runs(t)
-	fatalIf(t, len(runs) != 1, "kube-bench ran %d times, want once", len(runs))
+	runs := r.kubeBench.Runs(t)
+	testutil.FatalIf(t, len(runs) != 1, "kube-bench ran %d times, want once", len(runs))
 	got := slices.Clone(runs[0])
-	fatalIf(t, len(got) != len(wantKubeBenchArgs), "kube-bench ran with %q, want %q with the config directory", got, wantKubeBenchArgs)
+	testutil.FatalIf(t, len(got) != len(wantKubeBenchArgs), "kube-bench ran with %q, want %q with the config directory", got, wantKubeBenchArgs)
 	got[2] = ""
-	failIf(t, !slices.Equal(got, wantKubeBenchArgs), "kube-bench ran with %q, want %q, naming the profile since kube-bench never picks one for k3s", runs[0], wantKubeBenchArgs)
+	testutil.FailIf(t, !slices.Equal(got, wantKubeBenchArgs), "kube-bench ran with %q, want %q, naming the profile since kube-bench never picks one for k3s", runs[0], wantKubeBenchArgs)
 
 	s := r.kubeBenchSummary()
-	failIf(t, s.Tool != "kube-bench" || s.Version != "v0.16.0", "the summary names %s %s, want kube-bench v0.16.0", s.Tool, s.Version)
-	failIf(t, s.Profile != pinnedProfile || s.KubernetesVersion != "v1.36.3+k3s1", "the summary names profile %q for Kubernetes %q, want %s for the node's v1.36.3+k3s1", s.Profile, s.KubernetesVersion, pinnedProfile)
+	testutil.FailIf(t, s.Tool != "kube-bench" || s.Version != "v0.16.0", "the summary names %s %s, want kube-bench v0.16.0", s.Tool, s.Version)
+	testutil.FailIf(t, s.Profile != pinnedProfile || s.KubernetesVersion != "v1.36.3+k3s1", "the summary names profile %q for Kubernetes %q, want %s for the node's v1.36.3+k3s1", s.Profile, s.KubernetesVersion, pinnedProfile)
 	assertScanTimes(t, "the kube-bench summary", s.StartedAt, s.FinishedAt, before, after)
-	failIf(t, s.Error != nil, "the summary carries the error %q, want none", deref(s.Error))
+	testutil.FailIf(t, s.Error != nil, "the summary carries the error %q, want none", deref(s.Error))
 	wantTotals := map[string]int{"pass": 69, "fail": 3, "warn": 46, "info": 14}
-	failIf(t, fmt.Sprint(s.Totals) != fmt.Sprint(wantTotals), "the summary's totals are %v, want the run's %v", s.Totals, wantTotals)
+	testutil.FailIf(t, fmt.Sprint(s.Totals) != fmt.Sprint(wantTotals), "the summary's totals are %v, want the run's %v", s.Totals, wantTotals)
 	want := cannedBenchFailures(t, testFile("scan/kube-bench.json"))
-	failIf(t, !slices.Equal(s.Failed, want), "the summary lists the failed checks %v, want every FAIL of the run %v", s.Failed, want)
-	failIf(t, !strings.Contains(r.out, "kube-bench: ran"), "the scan printed %q, want it to say kube-bench ran", r.out)
+	testutil.FailIf(t, !slices.Equal(s.Failed, want), "the summary lists the failed checks %v, want every FAIL of the run %v", s.Failed, want)
+	testutil.FailIf(t, !strings.Contains(r.out, "kube-bench: ran"), "the scan printed %q, want it to say kube-bench ran", r.out)
 	assertLastRun(t, r, 0, "mitstack-scan: kube-bench: ran; kubescape: ran")
 }
 
@@ -253,14 +255,14 @@ func TestScanScript_KubeBenchRunsTheNamedK3sProfileAndKeepsEveryFailedCheck(t *t
 func assertLastRun(t *testing.T, r *scanRig, exit int, says string) {
 	t.Helper()
 	raw, ok := r.summaryFile("scan-run.json")
-	fatalIf(t, !ok, "the scan kept no scan-run.json")
+	testutil.FatalIf(t, !ok, "the scan kept no scan-run.json")
 	var last struct {
 		FinishedAt string `json:"finishedAt"`
 		ExitStatus int    `json:"exitStatus"`
 		Output     string `json:"output"`
 	}
-	fatalIf(t, json.Unmarshal([]byte(raw), &last) != nil, "scan-run.json is not JSON: %s", truncate(raw, 200))
-	failIf(t, !scanTimeShape.MatchString(last.FinishedAt) || last.ExitStatus != exit || !strings.Contains(last.Output, says),
+	testutil.FatalIf(t, json.Unmarshal([]byte(raw), &last) != nil, "scan-run.json is not JSON: %s", testutil.Truncate(raw, 200))
+	testutil.FailIf(t, !scanTimeShape.MatchString(last.FinishedAt) || last.ExitStatus != exit || !strings.Contains(last.Output, says),
 		"scan-run.json is %s, want a UTC finish time, exit status %d and output naming %q", raw, exit, says)
 }
 
@@ -268,41 +270,41 @@ func TestScanScript_KubescapeScansNSAWithNoExceptionAndNoHostSensor(t *testing.T
 	before := time.Now().UTC()
 	r := newScanRig(t).run()
 	after := time.Now().UTC()
-	fatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
+	testutil.FatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
 
 	args := r.kubescapeArgs()
-	fatalIf(t, len(args) < 3 || !slices.Equal(args[:3], []string{"scan", "framework", "nsa"}), "kubescape ran with %q, want scan framework nsa", args)
+	testutil.FatalIf(t, len(args) < 3 || !slices.Equal(args[:3], []string{"scan", "framework", "nsa"}), "kubescape ran with %q, want scan framework nsa", args)
 	for _, want := range [][]string{
 		{"--use-from", filepath.Join(r.kubescape, "nsa")},
 		{"--host-scan=false"},
 		{"--format", "json"},
 	} {
-		failIf(t, !containsRun(args, want), "kubescape ran with %q, want %q among them", args, want)
+		testutil.FailIf(t, !containsRun(args, want), "kubescape ran with %q, want %q among them", args, want)
 	}
 	exceptions, err := os.ReadFile(filepath.Join(r.kubescape, "exceptions.seen"))
-	fatalIf(t, err != nil, "kubescape was handed no --exceptions file: %v", err)
-	failIf(t, strings.TrimSpace(string(exceptions)) != "[]", "kubescape read the exceptions %q, want the empty list, since only the platform may exempt", exceptions)
+	testutil.FatalIf(t, err != nil, "kubescape was handed no --exceptions file: %v", err)
+	testutil.FailIf(t, strings.TrimSpace(string(exceptions)) != "[]", "kubescape read the exceptions %q, want the empty list, since only the platform may exempt", exceptions)
 	var inputs, wantInputs map[string]any
 	seen, err := os.ReadFile(filepath.Join(r.kubescape, "controls-config.seen"))
-	fatalIf(t, err != nil || json.Unmarshal(seen, &inputs) != nil, "kubescape was handed no controls config JSON: %v", err)
+	testutil.FatalIf(t, err != nil || json.Unmarshal(seen, &inputs) != nil, "kubescape was handed no controls config JSON: %v", err)
 	var defaults struct {
 		Settings struct {
 			PostureControlInputs map[string]any `json:"postureControlInputs"`
 		} `json:"settings"`
 	}
-	fatalIf(t, json.Unmarshal([]byte(testFile("scan/default_config_inputs")), &defaults) != nil, "the canned control inputs are not JSON")
+	testutil.FatalIf(t, json.Unmarshal([]byte(testFile("scan/default_config_inputs")), &defaults) != nil, "the canned control inputs are not JSON")
 	wantInputs = defaults.Settings.PostureControlInputs
-	failIf(t, mustJSON(inputs) != mustJSON(wantInputs), "kubescape read the control inputs %s, want the framework's postureControlInputs", truncate(string(seen), 200))
+	testutil.FailIf(t, testutil.MustJSON(inputs) != testutil.MustJSON(wantInputs), "kubescape read the control inputs %s, want the framework's postureControlInputs", testutil.Truncate(string(seen), 200))
 
 	s := r.kubescapeSummary()
-	failIf(t, s.Tool != "kubescape" || s.Version != "v4.0.15" || s.Framework != "NSA" || s.ControlsVersion != "v2.0.38",
+	testutil.FailIf(t, s.Tool != "kubescape" || s.Version != "v4.0.15" || s.Framework != "NSA" || s.ControlsVersion != "v2.0.38",
 		"the summary names %s %s, framework %s at %s, want kubescape v4.0.15, NSA at v2.0.38", s.Tool, s.Version, s.Framework, s.ControlsVersion)
 	assertScanTimes(t, "the kubescape summary", s.StartedAt, s.FinishedAt, before, after)
-	failIf(t, s.Error != nil, "the summary carries the error %q, want none", deref(s.Error))
-	failIf(t, s.ComplianceScore == nil, "the summary carries no compliance score")
+	testutil.FailIf(t, s.Error != nil, "the summary carries the error %q, want none", deref(s.Error))
+	testutil.FailIf(t, s.ComplianceScore == nil, "the summary carries no compliance score")
 	wantCounts := map[string]int{"criticalSeverity": 0, "highSeverity": 2, "mediumSeverity": 8, "lowSeverity": 1}
-	failIf(t, fmt.Sprint(s.FailedControlsBySeverity) != fmt.Sprint(wantCounts), "the summary counts %v failed controls by severity, want %v", s.FailedControlsBySeverity, wantCounts)
-	fatalIf(t, len(s.Failed) != 11, "the summary lists %d failed controls, want all 11", len(s.Failed))
+	testutil.FailIf(t, fmt.Sprint(s.FailedControlsBySeverity) != fmt.Sprint(wantCounts), "the summary counts %v failed controls by severity, want %v", s.FailedControlsBySeverity, wantCounts)
+	testutil.FatalIf(t, len(s.Failed) != 11, "the summary lists %d failed controls, want all 11", len(s.Failed))
 	ns := "kube-system"
 	wantHigh := []kubescapeControl{
 		{ID: "C-0270", Name: "Ensure CPU limits are set", Severity: "High", FailedResources: 3, Resources: []failingWorkload{
@@ -310,10 +312,10 @@ func TestScanScript_KubescapeScansNSAWithNoExceptionAndNoHostSensor(t *testing.T
 		{ID: "C-0271", Name: "Ensure memory limits are set", Severity: "High", FailedResources: 2, Resources: []failingWorkload{
 			{&ns, "Deployment", "local-path-provisioner"}, {&ns, "Deployment", "metrics-server"}}},
 	}
-	failIf(t, mustJSON(s.Failed[:2]) != mustJSON(wantHigh), "the summary's High controls are %s, want %s with each failing workload", mustJSON(s.Failed[:2]), mustJSON(wantHigh))
+	testutil.FailIf(t, testutil.MustJSON(s.Failed[:2]) != testutil.MustJSON(wantHigh), "the summary's High controls are %s, want %s with each failing workload", testutil.MustJSON(s.Failed[:2]), testutil.MustJSON(wantHigh))
 	for _, c := range s.Failed[2:] {
-		failIf(t, c.Severity == "High" || c.Severity == "Critical", "control %s is %s but listed after the Medium ones", c.ID, c.Severity)
-		failIf(t, len(c.Resources) != 0, "the %s control %s lists %d resources, want none below High", c.Severity, c.ID, len(c.Resources))
+		testutil.FailIf(t, c.Severity == "High" || c.Severity == "Critical", "control %s is %s but listed after the Medium ones", c.ID, c.Severity)
+		testutil.FailIf(t, len(c.Resources) != 0, "the %s control %s lists %d resources, want none below High", c.Severity, c.ID, len(c.Resources))
 	}
 }
 
@@ -349,19 +351,19 @@ func TestScanScript_RunsEachScanOnlyWhenItIsDue(t *testing.T) {
 			r := newScanRig(t)
 			if c.kept != "" {
 				for _, name := range []string{kubeBenchSummaryFile, kubescapeSummaryFile} {
-					path := writeIn(t, r.state, name, c.kept, 0o600)
+					path := testutil.WriteIn(t, r.state, name, c.kept, 0o600)
 					at := time.Now().Add(-c.age)
-					fatalIf(t, os.Chtimes(path, at, at) != nil, "setting the summary's age")
+					testutil.FatalIf(t, os.Chtimes(path, at, at) != nil, "setting the summary's age")
 				}
 			}
 			r.run()
-			fatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
-			ranBench, ranScape := len(r.kubeBench.runs(t)) > 0, r.kubescapeArgs() != nil
-			failIf(t, ranBench != c.wantRun || ranScape != c.wantRun, "kube-bench ran %v and kubescape ran %v, want both %v", ranBench, ranScape, c.wantRun)
+			testutil.FatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
+			ranBench, ranScape := len(r.kubeBench.Runs(t)) > 0, r.kubescapeArgs() != nil
+			testutil.FailIf(t, ranBench != c.wantRun || ranScape != c.wantRun, "kube-bench ran %v and kubescape ran %v, want both %v", ranBench, ranScape, c.wantRun)
 			if !c.wantRun {
 				got, _ := r.summaryFile(kubeBenchSummaryFile)
-				failIf(t, got != c.kept, "a scan that was not due rewrote its summary to %s", truncate(got, 200))
-				failIf(t, !strings.Contains(r.out, "kube-bench: not due"), "the scan printed %q, want it to say kube-bench was not due", r.out)
+				testutil.FailIf(t, got != c.kept, "a scan that was not due rewrote its summary to %s", testutil.Truncate(got, 200))
+				testutil.FailIf(t, !strings.Contains(r.out, "kube-bench: not due"), "the scan printed %q, want it to say kube-bench was not due", r.out)
 			}
 		})
 	}
@@ -372,13 +374,13 @@ func TestScanScript_AClusterThatDoesNotAnswerIsNotScanned(t *testing.T) {
 	r.k3sOpts = append(r.k3sOpts, k3sFailing(readNodes, 1, "The connection to the server 127.0.0.1:6443 was refused"))
 	r.run()
 
-	failIf(t, r.err == nil, "the scan script exited 0 with a cluster that does not answer, want a failure")
-	failIf(t, !strings.Contains(r.out, "the cluster does not answer") || !strings.Contains(r.out, "was refused"), "the scan printed %q, want it to say the cluster does not answer and why", r.out)
+	testutil.FailIf(t, r.err == nil, "the scan script exited 0 with a cluster that does not answer, want a failure")
+	testutil.FailIf(t, !strings.Contains(r.out, "the cluster does not answer") || !strings.Contains(r.out, "was refused"), "the scan printed %q, want it to say the cluster does not answer and why", r.out)
 	for _, name := range []string{kubeBenchSummaryFile, kubescapeSummaryFile} {
 		_, kept := r.summaryFile(name)
-		failIf(t, kept, "the scan kept %s with no cluster to scan", name)
+		testutil.FailIf(t, kept, "the scan kept %s with no cluster to scan", name)
 	}
-	failIf(t, len(r.kubeBench.runs(t)) != 0 || r.kubescapeArgs() != nil, "a tool ran against a cluster that does not answer")
+	testutil.FailIf(t, len(r.kubeBench.Runs(t)) != 0 || r.kubescapeArgs() != nil, "a tool ran against a cluster that does not answer")
 	assertLastRun(t, r, 1, "the cluster does not answer")
 }
 
@@ -386,28 +388,28 @@ func TestScanScript_KubernetesOlderThanTheProfileCoversIsKeptAsAnError(t *testin
 	r := newScanRig(t)
 	r.k3sOpts = append(r.k3sOpts, k3sAnswer(readNodes, strings.ReplaceAll(testFile("k3s/nodes.json"), "v1.36.3+k3s1", "v1.28.15+k3s1")))
 	r.run()
-	fatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
+	testutil.FatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
 
 	s := r.kubeBenchSummary()
-	fatalIf(t, s.Error == nil, "the summary carries no error for Kubernetes v1.28, which no pinned profile covers")
-	failIf(t, !strings.Contains(*s.Error, "no pinned k3s-cis profile covers Kubernetes v1.28.15+k3s1"), "the summary's error is %q, want it to name the uncovered version", deref(s.Error))
-	failIf(t, len(r.kubeBench.runs(t)) != 0, "kube-bench ran against a version no pinned profile covers")
-	failIf(t, !strings.Contains(r.out, "kube-bench: failed:"), "the scan printed %q, want it to say kube-bench failed", r.out)
+	testutil.FatalIf(t, s.Error == nil, "the summary carries no error for Kubernetes v1.28, which no pinned profile covers")
+	testutil.FailIf(t, !strings.Contains(*s.Error, "no pinned k3s-cis profile covers Kubernetes v1.28.15+k3s1"), "the summary's error is %q, want it to name the uncovered version", deref(s.Error))
+	testutil.FailIf(t, len(r.kubeBench.Runs(t)) != 0, "kube-bench ran against a version no pinned profile covers")
+	testutil.FailIf(t, !strings.Contains(r.out, "kube-bench: failed:"), "the scan printed %q, want it to say kube-bench failed", r.out)
 }
 
 func TestScanScript_AToolThatFailsIsKeptAsAnErrorWithItsStderr(t *testing.T) {
 	r := newScanRig(t)
-	r.kubeBench = newFakeTool(t, "kube-bench", "", strings.Repeat("x", 2000)+"unable to read the journal\n", 2)
+	r.kubeBench = testutil.NewFakeTool(t, "kube-bench", "", strings.Repeat("x", 2000)+"unable to read the journal\n", 2)
 	failKubescape(t, r.kubescape, "failed to list pods\n", 3)
 	r.run()
-	fatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
+	testutil.FatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
 
 	bench, scape := r.kubeBenchSummary(), r.kubescapeSummary()
-	fatalIf(t, bench.Error == nil || scape.Error == nil, "a failed tool left no error in its summary")
-	failIf(t, !strings.Contains(*bench.Error, "kube-bench exited 2") || !strings.Contains(*bench.Error, "unable to read the journal"), "kube-bench's error is %q, want its exit status and the end of its stderr", deref(bench.Error))
-	failIf(t, len(deref(bench.Error)) > scanErrorLimit, "kube-bench's error is %d characters, want at most %d", len(deref(bench.Error)), scanErrorLimit)
-	failIf(t, !strings.Contains(*scape.Error, "kubescape exited 3") || !strings.Contains(*scape.Error, "failed to list pods"), "kubescape's error is %q, want its exit status and stderr", deref(scape.Error))
-	failIf(t, bench.Failed != nil || scape.Failed != nil, "a failed run lists failed checks")
+	testutil.FatalIf(t, bench.Error == nil || scape.Error == nil, "a failed tool left no error in its summary")
+	testutil.FailIf(t, !strings.Contains(*bench.Error, "kube-bench exited 2") || !strings.Contains(*bench.Error, "unable to read the journal"), "kube-bench's error is %q, want its exit status and the end of its stderr", deref(bench.Error))
+	testutil.FailIf(t, len(deref(bench.Error)) > scanErrorLimit, "kube-bench's error is %d characters, want at most %d", len(deref(bench.Error)), scanErrorLimit)
+	testutil.FailIf(t, !strings.Contains(*scape.Error, "kubescape exited 3") || !strings.Contains(*scape.Error, "failed to list pods"), "kubescape's error is %q, want its exit status and stderr", deref(scape.Error))
+	testutil.FailIf(t, bench.Failed != nil || scape.Failed != nil, "a failed run lists failed checks")
 }
 
 func TestScanScript_ADownloadWithAnotherDigestIsNeverRun(t *testing.T) {
@@ -415,46 +417,46 @@ func TestScanScript_ADownloadWithAnotherDigestIsNeverRun(t *testing.T) {
 	t.Cleanup(srv.Close)
 	r := newScanRig(t).withEnv(scanURLEnv+"="+srv.URL+"/", scanRawURLEnv+"="+srv.URL+"/", scanKubeBenchEnv+"=", scanKubescapeEnv+"=")
 	r.run()
-	fatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
+	testutil.FatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
 
 	for _, c := range []struct{ file, pinned string }{
 		{kubeBenchSummaryFile, "sha256:82dbc7e598740dc9344d41f8ad0b8210d57c4c00bdb2c5f1d8a69a2b98baddcf"},
 		{kubescapeSummaryFile, "sha256:011569dbcde85afc96cf63262e4f967166b6680fd70a623e9065334b6767b244"},
 	} {
 		raw, ok := r.summaryFile(c.file)
-		fatalIf(t, !ok, "the scan kept no %s", c.file)
-		failIf(t, !strings.Contains(raw, "want "+c.pinned), "%s is %s, want an error naming the pinned digest %s", c.file, truncate(raw, 300), c.pinned)
+		testutil.FatalIf(t, !ok, "the scan kept no %s", c.file)
+		testutil.FailIf(t, !strings.Contains(raw, "want "+c.pinned), "%s is %s, want an error naming the pinned digest %s", c.file, testutil.Truncate(raw, 300), c.pinned)
 	}
 	entries, err := os.ReadDir(filepath.Join(r.state, "scan-tools"))
-	fatalIf(t, err != nil, "reading the tools directory: %v", err)
+	testutil.FatalIf(t, err != nil, "reading the tools directory: %v", err)
 	for _, e := range entries {
-		failIf(t, e.IsDir() && !strings.HasPrefix(e.Name(), "."), "the tools directory keeps %s after its digest did not match", e.Name())
+		testutil.FailIf(t, e.IsDir() && !strings.HasPrefix(e.Name(), "."), "the tools directory keeps %s after its digest did not match", e.Name())
 	}
 }
 
 func TestScanScript_SummariesStayWithinTheirBoundsAtAnySize(t *testing.T) {
 	r := newScanRig(t)
-	r.kubeBench = newFakeTool(t, "kube-bench", largestKubeBenchOutput(), "", 0)
+	r.kubeBench = testutil.NewFakeTool(t, "kube-bench", largestKubeBenchOutput(), "", 0)
 	r.kubescape = fakeKubescape(t, largestKubescapeOutput())
 	r.run()
-	fatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
+	testutil.FatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
 
 	for _, name := range []string{kubeBenchSummaryFile, kubescapeSummaryFile} {
 		raw, _ := r.summaryFile(name)
-		failIf(t, len(raw) >= scanSummaryLimit, "%s is %d bytes, want under the report's %d-byte bound", name, len(raw), scanSummaryLimit)
+		testutil.FailIf(t, len(raw) >= scanSummaryLimit, "%s is %d bytes, want under the report's %d-byte bound", name, len(raw), scanSummaryLimit)
 	}
 	bench := r.kubeBenchSummary()
-	failIf(t, len(bench.Failed) == 0 || len(mustJSON(bench.Failed)) > scanFailedLimit, "the kube-bench summary lists %d failed checks in %d bytes, want some within %d", len(bench.Failed), len(mustJSON(bench.Failed)), scanFailedLimit)
-	failIf(t, bench.Totals["fail"] <= len(bench.Failed), "the kube-bench totals count %d failures, want more than the %d listed, so a reader can tell the list is cut", bench.Totals["fail"], len(bench.Failed))
+	testutil.FailIf(t, len(bench.Failed) == 0 || len(testutil.MustJSON(bench.Failed)) > scanFailedLimit, "the kube-bench summary lists %d failed checks in %d bytes, want some within %d", len(bench.Failed), len(testutil.MustJSON(bench.Failed)), scanFailedLimit)
+	testutil.FailIf(t, bench.Totals["fail"] <= len(bench.Failed), "the kube-bench totals count %d failures, want more than the %d listed, so a reader can tell the list is cut", bench.Totals["fail"], len(bench.Failed))
 	for _, f := range bench.Failed {
-		failIf(t, len(f.Text) > 160, "check %s carries %d characters of text, want at most 160", f.ID, len(f.Text))
+		testutil.FailIf(t, len(f.Text) > 160, "check %s carries %d characters of text, want at most 160", f.ID, len(f.Text))
 	}
 	scape := r.kubescapeSummary()
-	fatalIf(t, len(scape.Failed) == 0, "the kubescape summary lists no failed control")
-	failIf(t, scape.Failed[0].Severity != "Critical", "the kubescape summary lists %s first, want the Critical controls first", scape.Failed[0].Severity)
+	testutil.FatalIf(t, len(scape.Failed) == 0, "the kubescape summary lists no failed control")
+	testutil.FailIf(t, scape.Failed[0].Severity != "Critical", "the kubescape summary lists %s first, want the Critical controls first", scape.Failed[0].Severity)
 	for _, c := range scape.Failed {
-		failIf(t, len(mustJSON(c.Resources)) > scanResourcesLimit, "control %s lists %d bytes of resources, want at most %d", c.ID, len(mustJSON(c.Resources)), scanResourcesLimit)
-		failIf(t, len(c.Resources) >= c.FailedResources, "control %s lists %d of %d failing resources, want the list cut and the count kept", c.ID, len(c.Resources), c.FailedResources)
+		testutil.FailIf(t, len(testutil.MustJSON(c.Resources)) > scanResourcesLimit, "control %s lists %d bytes of resources, want at most %d", c.ID, len(testutil.MustJSON(c.Resources)), scanResourcesLimit)
+		testutil.FailIf(t, len(c.Resources) >= c.FailedResources, "control %s lists %d of %d failing resources, want the list cut and the count kept", c.ID, len(c.Resources), c.FailedResources)
 	}
 }
 
@@ -464,7 +466,7 @@ func largestKubeBenchOutput() string {
 	for i := range 400 {
 		results = append(results, map[string]any{"test_number": fmt.Sprintf("9.%d", i), "test_desc": strings.Repeat("d", 900), "status": "FAIL", "scored": true, "type": ""})
 	}
-	return mustJSON(map[string]any{
+	return testutil.MustJSON(map[string]any{
 		"Controls": []any{map[string]any{"id": "9", "tests": []any{map[string]any{"section": "9.1", "results": results}}}},
 		"Totals":   map[string]int{"total_pass": 0, "total_fail": 400, "total_warn": 0, "total_info": 0},
 	})
@@ -488,7 +490,7 @@ func largestKubescapeOutput() string {
 		controls[fmt.Sprintf("C-%04d", c)] = map[string]any{"controlID": fmt.Sprintf("C-%04d", c), "name": strings.Repeat("n", 200), "status": "failed",
 			"severity": "Critical", "ResourceCounters": map[string]int{"failedResources": 500}}
 	}
-	return mustJSON(map[string]any{
+	return testutil.MustJSON(map[string]any{
 		"summaryDetails": map[string]any{"controls": controls, "complianceScore": 0.0,
 			"controlsSeverityCounters": map[string]int{"criticalSeverity": 40, "highSeverity": 0, "mediumSeverity": 0, "lowSeverity": 0}},
 		"metadata": map[string]any{"scanMetadata": map[string]any{"kubescapeVersion": "v4.0.15"}},

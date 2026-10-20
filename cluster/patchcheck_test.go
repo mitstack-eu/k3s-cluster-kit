@@ -8,17 +8,19 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mitstack-eu/k3s-cluster-kit/testutil"
 )
 
 func assertVerdict(t *testing.T, run patchCheckRun, verdict string) {
 	t.Helper()
 	got := run.result["verdict"]
-	failIf(t, got != verdict, "%s verdict = %#v, want %q:\n%s", patchCheckFile, got, verdict, run.raw)
+	testutil.FailIf(t, got != verdict, "%s verdict = %#v, want %q:\n%s", patchCheckFile, got, verdict, run.raw)
 	wantExit := 1
 	if verdict == "pass" {
 		wantExit = 0
 	}
-	failIf(t, run.exit != wantExit, "the patch check exited %d with verdict %q, want %d:\n%s", run.exit, verdict, wantExit, run.output())
+	testutil.FailIf(t, run.exit != wantExit, "the patch check exited %d with verdict %q, want %d:\n%s", run.exit, verdict, wantExit, run.output())
 	summary := strings.TrimRight(run.stdout, "\n")
 	if summary == "" || strings.Contains(summary, "\n") {
 		t.Errorf("the patch check printed %q on stdout, want a one-line summary", run.stdout)
@@ -29,11 +31,11 @@ func assertVerdict(t *testing.T, run patchCheckRun, verdict string) {
 
 func assertResultShape(t *testing.T, run patchCheckRun, now string) {
 	t.Helper()
-	keys := mapKeys(run.result)
-	failIf(t, !slices.Equal(keys, []string{"checkedAt", "k3s", "maxBehindDays", "os", "verdict"}), "%s has keys %v, want exactly checkedAt, verdict, maxBehindDays, os and k3s", patchCheckFile, keys)
-	failIf(t, now != "" && run.result["checkedAt"] != now, "%s checkedAt = %#v, want the clock's %s", patchCheckFile, run.result["checkedAt"], now)
+	keys := testutil.MapKeys(run.result)
+	testutil.FailIf(t, !slices.Equal(keys, []string{"checkedAt", "k3s", "maxBehindDays", "os", "verdict"}), "%s has keys %v, want exactly checkedAt, verdict, maxBehindDays, os and k3s", patchCheckFile, keys)
+	testutil.FailIf(t, now != "" && run.result["checkedAt"] != now, "%s checkedAt = %#v, want the clock's %s", patchCheckFile, run.result["checkedAt"], now)
 	got := run.result["maxBehindDays"]
-	failIf(t, got != float64(patchCheckMaxBehindDays), "%s maxBehindDays = %#v, want %d", patchCheckFile, got, patchCheckMaxBehindDays)
+	testutil.FailIf(t, got != float64(patchCheckMaxBehindDays), "%s maxBehindDays = %#v, want %d", patchCheckFile, got, patchCheckMaxBehindDays)
 }
 
 func wantK3s(running, latest string, firstNewer, publishedAt any, behindDays int, verdict string) map[string]any {
@@ -60,7 +62,7 @@ var wantAptPending = []any{
 }
 
 func TestPatchCheck_DefaultsToTheNodesSourcesAndTheK3sReleaseFeeds(t *testing.T) {
-	body := testRepoFile(t, "scripts/mitstack-patch-check.sh")
+	body := testutil.TestRepoFile(t, "scripts/mitstack-patch-check.sh")
 	for _, needle := range []string{
 		"https://update.k3s.io/v1-release/channels",
 		"https://api.github.com/repos/k3s-io/k3s/releases",
@@ -72,11 +74,11 @@ func TestPatchCheck_DefaultsToTheNodesSourcesAndTheK3sReleaseFeeds(t *testing.T)
 		"/var/run/reboot-required",
 		"dist-upgrade",
 		"/usr/local/bin/k3s",
-		reportK3sEnv, patchCheckAptGetEnv, patchCheckUnameEnv, reportOSReleaseEnv, patchCheckBootDirEnv,
-		reportStateDirEnv, reportRebootRequiredEnv, patchCheckChannelsURLEnv, patchCheckReleasesURLEnv, patchCheckNowEnv,
+		testutil.ReportK3sEnv, patchCheckAptGetEnv, patchCheckUnameEnv, reportOSReleaseEnv, patchCheckBootDirEnv,
+		testutil.ReportStateDirEnv, reportRebootRequiredEnv, patchCheckChannelsURLEnv, patchCheckReleasesURLEnv, patchCheckNowEnv,
 		patchCheckUpdateStampEnv, aptUpdateStampDefault,
 	} {
-		failIf(t, !strings.Contains(body, needle), "the patch check does not contain %q", needle)
+		testutil.FailIf(t, !strings.Contains(body, needle), "the patch check does not contain %q", needle)
 	}
 }
 
@@ -103,11 +105,11 @@ func TestPatchCheck_K3sVerdictFollowsHowManyWholeDaysBehindItsChannelItIs(t *tes
 			run := n.run(t, tc.now)
 			assertResultShape(t, run, tc.now)
 			assertVerdict(t, run, tc.verdict)
-			assertValues(t, "k3s", run.part(t, "k3s"), wantK3s(tc.running, latest, tc.firstNewer, tc.publishedAt, tc.days, tc.verdict))
-			assertValues(t, "os", run.part(t, "os"), wantPatchedOS(n.refreshedAt(t, tc.now)))
+			testutil.AssertValues(t, "k3s", run.part(t, "k3s"), wantK3s(tc.running, latest, tc.firstNewer, tc.publishedAt, tc.days, tc.verdict))
+			testutil.AssertValues(t, "os", run.part(t, "os"), wantPatchedOS(n.refreshedAt(t, tc.now)))
 			for _, path := range []string{k3sChannelsPath, k3sReleasesPath} {
 				got := n.feeds.requests(path)
-				failIf(t, got != 1, "the check requested %s %d times, want once", path, got)
+				testutil.FailIf(t, got != 1, "the check requested %s %d times, want once", path, got)
 			}
 		})
 	}
@@ -125,19 +127,19 @@ func TestPatchCheck_ReadsTheRunningK3sFromTheNodeAndFallsBackToK3sVersion(t *tes
 		run := n.run(t, now)
 
 		running := run.part(t, "k3s")["running"]
-		failIf(t, running != "v1.36.5+k3s1", "k3s.running = %#v; want the node's kubelet version v1.36.5+k3s1 over k3s --version", running)
+		testutil.FailIf(t, running != "v1.36.5+k3s1", "k3s.running = %#v; want the node's kubelet version v1.36.5+k3s1 over k3s --version", running)
 	})
 	t.Run("the API is not up", func(t *testing.T) {
 		t.Parallel()
 		n := newPatchCheckNode(t)
-		k3s := newFakeK3s(t, k3sFailing(readNodes, 1, k3sRefused+"\n"),
+		k3s := newFakeK3s(t, k3sFailing(readNodes, 1, testutil.K3sRefused+"\n"),
 			k3sVersion("k3s version v1.36.5+k3s1 (2d0f82fa)\ngo version go1.24.6\n", "", 0))
 		n.k3s = k3s.path
 
 		run := n.run(t, now)
 
 		assertVerdict(t, run, "pass")
-		assertValues(t, "k3s", run.part(t, "k3s"), wantK3s("v1.36.5+k3s1", "v1.36.5+k3s1", nil, nil, 0, "pass"))
+		testutil.AssertValues(t, "k3s", run.part(t, "k3s"), wantK3s("v1.36.5+k3s1", "v1.36.5+k3s1", nil, nil, 0, "pass"))
 		if !slices.ContainsFunc(k3s.argvs(t), func(a []string) bool {
 			return slices.Equal(a, []string{"--version"}) || slices.Equal(a, []string{"-v"}) || slices.Equal(a, []string{"version"})
 		}) {
@@ -150,37 +152,37 @@ func TestPatchCheck_NeverPassesWhenItCannotReadK3sOrItsReleases(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name  string
-		setup func(t *testing.T, n *patchCheckNode) []scriptRunOption
+		setup func(t *testing.T, n *patchCheckNode) []testutil.ScriptRunOption
 	}{
-		{"the channels answer 503", func(t *testing.T, n *patchCheckNode) []scriptRunOption {
+		{"the channels answer 503", func(t *testing.T, n *patchCheckNode) []testutil.ScriptRunOption {
 			n.feeds.answer(k3sChannelsPath, http.StatusServiceUnavailable, "")
 			return nil
 		}},
-		{"GitHub answers 403 rate limited", func(t *testing.T, n *patchCheckNode) []scriptRunOption {
+		{"GitHub answers 403 rate limited", func(t *testing.T, n *patchCheckNode) []testutil.ScriptRunOption {
 			n.feeds.answer(k3sReleasesPath, http.StatusForbidden, `{"message": "API rate limit exceeded for 203.0.113.7."}`)
 			return nil
 		}},
-		{"the channels are not JSON", func(t *testing.T, n *patchCheckNode) []scriptRunOption {
+		{"the channels are not JSON", func(t *testing.T, n *patchCheckNode) []testutil.ScriptRunOption {
 			n.feeds.answer(k3sChannelsPath, http.StatusOK, "<html><body>maintenance</body></html>")
 			return nil
 		}},
-		{"the releases are not JSON", func(t *testing.T, n *patchCheckNode) []scriptRunOption {
+		{"the releases are not JSON", func(t *testing.T, n *patchCheckNode) []testutil.ScriptRunOption {
 			n.feeds.answer(k3sReleasesPath, http.StatusOK, "tag_name: v1.36.5+k3s1")
 			return nil
 		}},
-		{"the releases are not a list", func(t *testing.T, n *patchCheckNode) []scriptRunOption {
+		{"the releases are not a list", func(t *testing.T, n *patchCheckNode) []testutil.ScriptRunOption {
 			n.feeds.answer(k3sReleasesPath, http.StatusOK, `{"message": "Not Found"}`)
 			return nil
 		}},
-		{"the running minor has no channel", func(t *testing.T, n *patchCheckNode) []scriptRunOption {
+		{"the running minor has no channel", func(t *testing.T, n *patchCheckNode) []testutil.ScriptRunOption {
 			n.running(t, "v1.38.0+k3s1")
 			return nil
 		}},
-		{"the channels are unreachable", func(t *testing.T, n *patchCheckNode) []scriptRunOption {
-			return []scriptRunOption{withEnv(patchCheckChannelsURLEnv, closedEndpoint(t))}
+		{"the channels are unreachable", func(t *testing.T, n *patchCheckNode) []testutil.ScriptRunOption {
+			return []testutil.ScriptRunOption{withEnv(patchCheckChannelsURLEnv, closedEndpoint(t))}
 		}},
-		{"k3s answers nothing", func(t *testing.T, n *patchCheckNode) []scriptRunOption {
-			n.k3s = newFakeTool(t, "k3s", "", k3sRefused+"\n", 1).path
+		{"k3s answers nothing", func(t *testing.T, n *patchCheckNode) []testutil.ScriptRunOption {
+			n.k3s = testutil.NewFakeTool(t, "k3s", "", testutil.K3sRefused+"\n", 1).Path
 			return nil
 		}},
 	}
@@ -195,10 +197,10 @@ func TestPatchCheck_NeverPassesWhenItCannotReadK3sOrItsReleases(t *testing.T) {
 			run := n.run(t, now, opts...)
 
 			k3sVerdict := run.part(t, "k3s")["verdict"]
-			failIf(t, k3sVerdict != "unknown", "k3s.verdict = %#v when %s; want unknown:\n%s", k3sVerdict, name, run.raw)
+			testutil.FailIf(t, k3sVerdict != "unknown", "k3s.verdict = %#v when %s; want unknown:\n%s", k3sVerdict, name, run.raw)
 			assertVerdict(t, run, "unknown")
 			osVerdict := run.part(t, "os")["verdict"]
-			failIf(t, osVerdict != "pass", "os.verdict = %#v when %s; want pass for a patched OS whatever k3s's reads did", osVerdict, name)
+			testutil.FailIf(t, osVerdict != "pass", "os.verdict = %#v when %s; want pass for a patched OS whatever k3s's reads did", osVerdict, name)
 		})
 	}
 }
@@ -227,9 +229,9 @@ func TestPatchCheck_ReportsTheRunningOSAndTheNewestInstalledKernel(t *testing.T)
 
 			osPart := run.part(t, "os")
 			running := osPart["running"]
-			failIf(t, running != runningOS, "os.running with %s = %#v; want %q", tc.name, running, runningOS)
+			testutil.FailIf(t, running != runningOS, "os.running with %s = %#v; want %q", tc.name, running, runningOS)
 			latestKernel := osPart["latestKernel"]
-			failIf(t, latestKernel != tc.latest, "os.latestKernel with %s = %#v; want %#v", tc.name, latestKernel, tc.latest)
+			testutil.FailIf(t, latestKernel != tc.latest, "os.latestKernel with %s = %#v; want %#v", tc.name, latestKernel, tc.latest)
 		})
 	}
 }
@@ -237,21 +239,21 @@ func TestPatchCheck_ReportsTheRunningOSAndTheNewestInstalledKernel(t *testing.T)
 func TestPatchCheck_ListsThePendingUpgradesFromASimulatedDistUpgrade(t *testing.T) {
 	t.Parallel()
 	n := newPatchCheckNode(t)
-	n.aptGet = newFakeTool(t, "apt-get", cannedAptPending, "", 0)
+	n.aptGet = testutil.NewFakeTool(t, "apt-get", cannedAptPending, "", 0)
 	const now = "2026-10-08T03:10:00Z"
 	run := n.run(t, now)
 	assertVerdict(t, run, "pass")
-	assertValues(t, "os", run.part(t, "os"), map[string]any{
+	testutil.AssertValues(t, "os", run.part(t, "os"), map[string]any{
 		"running": runningOS, "latestKernel": runningKernel, "pendingUpgrades": wantAptPending,
 		"rebootRequired": false, "listsRefreshedAt": n.refreshedAt(t, now),
 		"behindSince": now, "behindDays": float64(0), "verdict": "pass",
 	})
-	runs := n.aptGet.runs(t)
-	fatalIf(t, len(runs) == 0, "the check never ran apt-get")
+	runs := n.aptGet.Runs(t)
+	testutil.FatalIf(t, len(runs) == 0, "the check never ran apt-get")
 	simulated := []string{"-s", "--simulate", "--just-print", "--dry-run", "--recon", "--no-act"}
 	for _, args := range runs {
-		failIf(t, slices.Contains(args, "update"), "the check ran apt-get %q, want it never to update the package lists itself", args)
-		failIf(t, !slices.Contains(args, "dist-upgrade") || !slices.ContainsFunc(args, func(a string) bool { return slices.Contains(simulated, a) }), "the check ran apt-get %q, want only a simulated dist-upgrade", args)
+		testutil.FailIf(t, slices.Contains(args, "update"), "the check ran apt-get %q, want it never to update the package lists itself", args)
+		testutil.FailIf(t, !slices.Contains(args, "dist-upgrade") || !slices.ContainsFunc(args, func(a string) bool { return slices.Contains(simulated, a) }), "the check ran apt-get %q, want only a simulated dist-upgrade", args)
 	}
 }
 
@@ -262,12 +264,12 @@ func TestPatchCheck_BoundsThePendingUpgrades(t *testing.T) {
 		lines = append(lines, fmt.Sprintf("Inst package-%04d-%s [1.0.%d-0ubuntu1] (1.0.%d-0ubuntu2 Ubuntu:24.04/noble-updates [amd64])", i, strings.Repeat("p", 30), i, i))
 	}
 	n := newPatchCheckNode(t)
-	n.aptGet = newFakeTool(t, "apt-get", aptSimulationHeader+strings.Join(lines, "\n")+"\n", "", 0)
+	n.aptGet = testutil.NewFakeTool(t, "apt-get", aptSimulationHeader+strings.Join(lines, "\n")+"\n", "", 0)
 	run := n.run(t, "2026-10-08T03:10:00Z")
 	pending, ok := run.part(t, "os")["pendingUpgrades"].([]any)
-	fatalIf(t, !ok || len(pending) == 0, "os.pendingUpgrades = %#v, want the first of the 500 upgrades", run.part(t, "os")["pendingUpgrades"])
-	n2 := len(mustJSON(pending))
-	failIf(t, n2 > pendingUpgradesLimit, "os.pendingUpgrades is %d bytes of JSON text, want at most %d", n2, pendingUpgradesLimit)
+	testutil.FatalIf(t, !ok || len(pending) == 0, "os.pendingUpgrades = %#v, want the first of the 500 upgrades", run.part(t, "os")["pendingUpgrades"])
+	n2 := len(testutil.MustJSON(pending))
+	testutil.FailIf(t, n2 > pendingUpgradesLimit, "os.pendingUpgrades is %d bytes of JSON text, want at most %d", n2, pendingUpgradesLimit)
 	for i, e := range pending {
 		want := map[string]any{
 			"package":   fmt.Sprintf("package-%04d-%s", i, strings.Repeat("p", 30)),
@@ -279,10 +281,10 @@ func TestPatchCheck_BoundsThePendingUpgrades(t *testing.T) {
 			break
 		}
 	}
-	failIf(t, len(run.raw) > patchCheckFileLimit, "%s is %d bytes, want at most %d so the report carries it whole", patchCheckFile, len(run.raw), patchCheckFileLimit)
+	testutil.FailIf(t, len(run.raw) > patchCheckFileLimit, "%s is %d bytes, want at most %d so the report carries it whole", patchCheckFile, len(run.raw), patchCheckFileLimit)
 }
 
-func mapsEqualAny(a, b map[string]any) bool { return mustJSON(a) == mustJSON(b) }
+func mapsEqualAny(a, b map[string]any) bool { return testutil.MustJSON(a) == testutil.MustJSON(b) }
 
 func TestPatchCheck_RecordsAPendingReboot(t *testing.T) {
 	t.Parallel()
@@ -291,7 +293,7 @@ func TestPatchCheck_RecordsAPendingReboot(t *testing.T) {
 	const now = "2026-10-08T03:10:00Z"
 	run := n.run(t, now)
 	assertVerdict(t, run, "pass")
-	assertValues(t, "os", run.part(t, "os"), map[string]any{
+	testutil.AssertValues(t, "os", run.part(t, "os"), map[string]any{
 		"running": runningOS, "latestKernel": runningKernel, "pendingUpgrades": []any{},
 		"rebootRequired": true, "listsRefreshedAt": n.refreshedAt(t, now),
 		"behindSince": now, "behindDays": float64(0), "verdict": "pass",
@@ -301,11 +303,11 @@ func TestPatchCheck_RecordsAPendingReboot(t *testing.T) {
 func TestPatchCheck_KeepsWhenTheOSFellBehindAndFailsFromTheFifteenthDay(t *testing.T) {
 	t.Parallel()
 	n := newPatchCheckNode(t)
-	pending := newFakeTool(t, "apt-get", cannedAptPending, "", 0)
-	patched := newFakeTool(t, "apt-get", cannedAptNothingPending, "", 0)
+	pending := testutil.NewFakeTool(t, "apt-get", cannedAptPending, "", 0)
+	patched := testutil.NewFakeTool(t, "apt-get", cannedAptNothingPending, "", 0)
 	steps := []struct {
 		now         string
-		aptGet      fakeTool
+		aptGet      testutil.FakeTool
 		behindSince any
 		days        int
 		verdict     string
@@ -323,11 +325,11 @@ func TestPatchCheck_KeepsWhenTheOSFellBehindAndFailsFromTheFifteenthDay(t *testi
 
 		osPart := run.part(t, "os")
 		behindSince := osPart["behindSince"]
-		failIf(t, behindSince != s.behindSince, "check %d at %s: os.behindSince = %#v; want %#v", i+1, s.now, behindSince, s.behindSince)
+		testutil.FailIf(t, behindSince != s.behindSince, "check %d at %s: os.behindSince = %#v; want %#v", i+1, s.now, behindSince, s.behindSince)
 		behindDays := osPart["behindDays"]
-		failIf(t, behindDays != float64(s.days), "check %d at %s: os.behindDays = %#v; want %d", i+1, s.now, behindDays, s.days)
+		testutil.FailIf(t, behindDays != float64(s.days), "check %d at %s: os.behindDays = %#v; want %d", i+1, s.now, behindDays, s.days)
 		verdict := osPart["verdict"]
-		failIf(t, verdict != s.verdict, "check %d at %s: os.verdict = %#v; want %s", i+1, s.now, verdict, s.verdict)
+		testutil.FailIf(t, verdict != s.verdict, "check %d at %s: os.verdict = %#v; want %s", i+1, s.now, verdict, s.verdict)
 		// k3s is on its channel's latest throughout, so the OS decides.
 		assertVerdict(t, run, s.verdict)
 	}
@@ -336,12 +338,12 @@ func TestPatchCheck_KeepsWhenTheOSFellBehindAndFailsFromTheFifteenthDay(t *testi
 func TestPatchCheck_NeverPassesWhenAptGetFails(t *testing.T) {
 	t.Parallel()
 	n := newPatchCheckNode(t)
-	n.aptGet = newFakeTool(t, "apt-get", "", "E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 2211 (unattended-upgr)\n", 100)
+	n.aptGet = testutil.NewFakeTool(t, "apt-get", "", "E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 2211 (unattended-upgr)\n", 100)
 
 	run := n.run(t, "2026-10-08T03:10:00Z")
 
 	verdict := run.part(t, "os")["verdict"]
-	failIf(t, verdict != "unknown", "os.verdict = %#v after apt-get failed; want unknown:\n%s", verdict, run.raw)
+	testutil.FailIf(t, verdict != "unknown", "os.verdict = %#v after apt-get failed; want unknown:\n%s", verdict, run.raw)
 	assertVerdict(t, run, "unknown")
 }
 
@@ -352,21 +354,21 @@ func TestPatchCheck_UsesTheClockWithoutAnOverride(t *testing.T) {
 	run := n.run(t, "")
 	end := time.Now()
 	assertResultShape(t, run, "")
-	assertUTCWithin(t, run.result["checkedAt"], start, end)
+	testutil.AssertUTCWithin(t, run.result["checkedAt"], start, end)
 }
 
 func TestPatchCheck_TheNextReportCarriesWhatTheCheckWrote(t *testing.T) {
 	t.Parallel()
 	n := newPatchCheckNode(t)
 	n.running(t, "v1.36.3+k3s1")
-	n.aptGet = newFakeTool(t, "apt-get", cannedAptPending, "", 0)
+	n.aptGet = testutil.NewFakeTool(t, "apt-get", cannedAptPending, "", 0)
 	run := n.run(t, "2026-10-08T03:10:00Z")
 	assertVerdict(t, run, "fail")
-	fatalIf(t, len(run.raw) > patchCheckFileLimit, "%s is %d bytes, want at most %d so the report carries it whole", patchCheckFile, len(run.raw), patchCheckFileLimit)
+	testutil.FatalIf(t, len(run.raw) > patchCheckFileLimit, "%s is %d bytes, want at most %d so the report carries it whole", patchCheckFile, len(run.raw), patchCheckFileLimit)
 
-	got := patchingFields(t, newReportRig(t, withEnvVar(reportStateDirEnv, n.stateDir)).send())["check"]
+	got := patchingFields(t, newReportRig(t, withEnvVar(testutil.ReportStateDirEnv, n.stateDir)).send())["check"]
 	carried, _ := decodeAny(t, "patching.check", got).(map[string]any)
-	failIf(t, carried == nil || !mapsEqualAny(carried, run.result), "patching.check = %s\nwant what the check wrote, %s", got, run.raw)
+	testutil.FailIf(t, carried == nil || !mapsEqualAny(carried, run.result), "patching.check = %s\nwant what the check wrote, %s", got, run.raw)
 }
 
 func TestPatchCheck_OSIsUnknownWithoutAListsRefreshStamp(t *testing.T) {
@@ -378,9 +380,9 @@ func TestPatchCheck_OSIsUnknownWithoutAListsRefreshStamp(t *testing.T) {
 
 	osPart := run.part(t, "os")
 	refreshedAt, ok := osPart["listsRefreshedAt"]
-	failIf(t, !ok || refreshedAt != nil, "os.listsRefreshedAt = %#v (present %v) without the stamp; want null", refreshedAt, ok)
+	testutil.FailIf(t, !ok || refreshedAt != nil, "os.listsRefreshedAt = %#v (present %v) without the stamp; want null", refreshedAt, ok)
 	verdict := osPart["verdict"]
-	failIf(t, verdict != "unknown", "os.verdict = %#v without the update stamp; want unknown:\n%s", verdict, run.raw)
+	testutil.FailIf(t, verdict != "unknown", "os.verdict = %#v without the update stamp; want unknown:\n%s", verdict, run.raw)
 	assertVerdict(t, run, "unknown")
 }
 
@@ -406,11 +408,11 @@ func TestPatchCheck_OSFailsOnPackageListsMoreThan14DaysStale(t *testing.T) {
 
 			osPart := run.part(t, "os")
 			refreshedAt, want := osPart["listsRefreshedAt"], n.refreshedAt(t, now)
-			failIf(t, refreshedAt != want, "os.listsRefreshedAt with lists %s = %#v; want the stamp's mtime %s", tc.name, refreshedAt, want)
+			testutil.FailIf(t, refreshedAt != want, "os.listsRefreshedAt with lists %s = %#v; want the stamp's mtime %s", tc.name, refreshedAt, want)
 			pending := osPart["pendingUpgrades"]
-			failIf(t, !reflect.DeepEqual(pending, []any{}), "os.pendingUpgrades with lists %s = %#v; want none, so only the lists' age decides", tc.name, pending)
+			testutil.FailIf(t, !reflect.DeepEqual(pending, []any{}), "os.pendingUpgrades with lists %s = %#v; want none, so only the lists' age decides", tc.name, pending)
 			verdict := osPart["verdict"]
-			failIf(t, verdict != tc.verdict, "os.verdict with lists %s = %#v; want %s:\n%s", tc.name, verdict, tc.verdict, run.raw)
+			testutil.FailIf(t, verdict != tc.verdict, "os.verdict with lists %s = %#v; want %s:\n%s", tc.name, verdict, tc.verdict, run.raw)
 			// k3s is on its channel's latest, so the OS decides the check.
 			assertVerdict(t, run, tc.verdict)
 		})
@@ -429,7 +431,7 @@ func TestPatchCheck_NeverStoresAnUnvalidatedK3sAnswer(t *testing.T) {
 			n.feeds.answer(k3sChannelsPath, http.StatusOK, strings.Replace(cannedK3sChannels, `"latest": "v1.36.5+k3s1"`, `"latest": "`+junk+`"`, 1))
 		}, "latest"},
 		{"a published_at of 10 KB", "v1.36.4+k3s1", func(n *patchCheckNode) {
-			n.feeds.answer(k3sReleasesPath, http.StatusOK, mustJSON([]any{
+			n.feeds.answer(k3sReleasesPath, http.StatusOK, testutil.MustJSON([]any{
 				k3sRelease("v1.36.5+k3s1", false, junk),
 				k3sRelease("v1.36.4+k3s1", false, "2026-08-27T15:53:55Z"),
 			}))
@@ -444,13 +446,13 @@ func TestPatchCheck_NeverStoresAnUnvalidatedK3sAnswer(t *testing.T) {
 
 			run := n.run(t, "2026-10-08T03:10:00Z")
 
-			failIf(t, len(run.raw) > patchCheckFileLimit, "%s with %s is %d bytes; want at most %d", patchCheckFile, tc.name, len(run.raw), patchCheckFileLimit)
+			testutil.FailIf(t, len(run.raw) > patchCheckFileLimit, "%s with %s is %d bytes; want at most %d", patchCheckFile, tc.name, len(run.raw), patchCheckFileLimit)
 			k3s := run.part(t, "k3s")
 			verdict := k3s["verdict"]
-			failIf(t, verdict != "unknown", "k3s.verdict with %s = %#v; want unknown for an answer that does not parse", tc.name, verdict)
+			testutil.FailIf(t, verdict != "unknown", "k3s.verdict with %s = %#v; want unknown for an answer that does not parse", tc.name, verdict)
 			kept := k3s[tc.field]
-			failIf(t, kept != nil, "k3s.%s with %s = %q; want null, since an answer that does not parse is never kept", tc.field, tc.name, truncate(fmt.Sprint(kept), 80))
-			failIf(t, strings.Contains(string(run.raw), strings.Repeat("Z", 200)), "%s with %s keeps the junk answer verbatim", patchCheckFile, tc.name)
+			testutil.FailIf(t, kept != nil, "k3s.%s with %s = %q; want null, since an answer that does not parse is never kept", tc.field, tc.name, testutil.Truncate(fmt.Sprint(kept), 80))
+			testutil.FailIf(t, strings.Contains(string(run.raw), strings.Repeat("Z", 200)), "%s with %s keeps the junk answer verbatim", patchCheckFile, tc.name)
 			assertVerdict(t, run, "unknown")
 		})
 	}

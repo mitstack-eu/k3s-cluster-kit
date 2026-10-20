@@ -5,9 +5,12 @@ package cluster
 import (
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/mitstack-eu/k3s-cluster-kit/testutil"
 )
 
 const (
@@ -25,7 +28,7 @@ func filesUnder(t *testing.T, seed map[string]string, dir string) map[string]str
 	files := map[string]string{}
 	for p, content := range seed {
 		if rest, ok := strings.CutPrefix(p, dir+"/"); ok {
-			fatalIf(t, strings.Contains(rest, "/"), "the seed writes %s in a subdirectory of %s, want the component's files flat as cluster-bases holds them", p, dir)
+			testutil.FatalIf(t, strings.Contains(rest, "/"), "the seed writes %s in a subdirectory of %s, want the component's files flat as cluster-bases holds them", p, dir)
 			files[rest] = content
 		}
 	}
@@ -37,7 +40,7 @@ func cloudNativePGDocs(t *testing.T) []map[string]any {
 	files := filesUnder(t, renderGoldenSeedWithClusterBases(t), wantCloudNativePGDir)
 	var docs []map[string]any
 	for _, name := range slices.Sorted(maps.Keys(files)) {
-		docs = append(docs, yamlDocs(t, wantCloudNativePGDir+"/"+name, files[name])...)
+		docs = append(docs, testutil.YamlDocs(t, wantCloudNativePGDir+"/"+name, files[name])...)
 	}
 	return docs
 }
@@ -45,12 +48,12 @@ func cloudNativePGDocs(t *testing.T) []map[string]any {
 func pinnedImages(t *testing.T) []string {
 	t.Helper()
 	policy := admissionPolicy(t, "mitstack-restrict-image-registries")
-	variables, _ := dig(policy, "spec", "variables").([]any)
+	variables, _ := testutil.Dig(policy, "spec", "variables").([]any)
 	for _, v := range variables {
-		if dig(v, "name") != "pinnedImages" {
+		if testutil.Dig(v, "name") != "pinnedImages" {
 			continue
 		}
-		expression, _ := dig(v, "expression").(string)
+		expression, _ := testutil.Dig(v, "expression").(string)
 		var images []string
 		for _, m := range quotedCEL.FindAllStringSubmatch(expression, -1) {
 			images = append(images, m[1]+m[2])
@@ -68,16 +71,16 @@ func TestSeed_TheCloudNativePGOperatorRunsThePinnedOperatorImage(t *testing.T) {
 			deployments = append(deployments, doc)
 		}
 	}
-	fatalIf(t, len(deployments) != 1, "the cloudnative-pg component holds %d Deployments, want the operator's alone", len(deployments))
-	containers, _ := dig(deployments[0], "spec", "template", "spec", "containers").([]any)
-	fatalIf(t, len(containers) != 1, "the operator's Deployment runs %d containers, want one", len(containers))
+	testutil.FatalIf(t, len(deployments) != 1, "the cloudnative-pg component holds %d Deployments, want the operator's alone", len(deployments))
+	containers, _ := testutil.Dig(deployments[0], "spec", "template", "spec", "containers").([]any)
+	testutil.FatalIf(t, len(containers) != 1, "the operator's Deployment runs %d containers, want one", len(containers))
 	env := map[string]any{}
-	for _, e := range dig(containers[0], "env").([]any) {
-		env[dig(e, "name").(string)] = dig(e, "value")
+	for _, e := range testutil.Dig(containers[0], "env").([]any) {
+		env[testutil.Dig(e, "name").(string)] = testutil.Dig(e, "value")
 	}
 
-	failIf(t, dig(containers[0], "image") != wantOperatorImage, "the operator runs %v, want %s, the image pinnedImages names", dig(containers[0], "image"), wantOperatorImage)
-	failIf(t, env["OPERATOR_IMAGE_NAME"] != wantOperatorImage, "OPERATOR_IMAGE_NAME = %v, want %s, the image each instance pod's bootstrap container runs", env["OPERATOR_IMAGE_NAME"], wantOperatorImage)
+	testutil.FailIf(t, testutil.Dig(containers[0], "image") != wantOperatorImage, "the operator runs %v, want %s, the image pinnedImages names", testutil.Dig(containers[0], "image"), wantOperatorImage)
+	testutil.FailIf(t, env["OPERATOR_IMAGE_NAME"] != wantOperatorImage, "OPERATOR_IMAGE_NAME = %v, want %s, the image each instance pod's bootstrap container runs", env["OPERATOR_IMAGE_NAME"], wantOperatorImage)
 }
 
 func TestAdmission_CloudNativePGTestRunsThePinnedImagesInADatabaseSliceAndTheSameImagesByTag(t *testing.T) {
@@ -90,16 +93,16 @@ func TestAdmission_CloudNativePGTestRunsThePinnedImagesInADatabaseSliceAndTheSam
 	}
 	untagged := func(image string) string { name, _, _ := strings.Cut(image, "@"); return name }
 
-	failIf(t, !slices.Equal(images("instance.yaml"), []string{wantPostgres16Image, wantOperatorImage}), "instance.yaml runs %v, want Postgres on %s and the bootstrap container on %s", images("instance.yaml"), wantPostgres16Image, wantOperatorImage)
-	failIf(t, !slices.Equal(images("tagged.yaml"), []string{untagged(wantPostgres16Image), untagged(wantOperatorImage)}), "tagged.yaml runs %v, want the pinned images named by tag alone", images("tagged.yaml"))
-	failIf(t, slices.Contains(pinnedImages(t), images("unpinned.yaml")[0]), "unpinned.yaml runs %s, which pinnedImages names, want an image it refuses", images("unpinned.yaml")[0])
-	failIf(t, dig(admissionFixture(t, "cloudnative-pg", "operator.yaml"), "metadata", "namespace") != "cnpg-system", "operator.yaml is not in cnpg-system")
-	instanceNamespace := dig(admissionFixture(t, "cloudnative-pg", "instance.yaml"), "metadata", "namespace")
-	selectors, _ := dig(admissionFixture(t, "cloudnative-pg", "values.yaml"), "namespaceSelector").([]any)
+	testutil.FailIf(t, !slices.Equal(images("instance.yaml"), []string{wantPostgres16Image, wantOperatorImage}), "instance.yaml runs %v, want Postgres on %s and the bootstrap container on %s", images("instance.yaml"), wantPostgres16Image, wantOperatorImage)
+	testutil.FailIf(t, !slices.Equal(images("tagged.yaml"), []string{untagged(wantPostgres16Image), untagged(wantOperatorImage)}), "tagged.yaml runs %v, want the pinned images named by tag alone", images("tagged.yaml"))
+	testutil.FailIf(t, slices.Contains(pinnedImages(t), images("unpinned.yaml")[0]), "unpinned.yaml runs %s, which pinnedImages names, want an image it refuses", images("unpinned.yaml")[0])
+	testutil.FailIf(t, testutil.Dig(admissionFixture(t, "cloudnative-pg", "operator.yaml"), "metadata", "namespace") != "cnpg-system", "operator.yaml is not in cnpg-system")
+	instanceNamespace := testutil.Dig(admissionFixture(t, "cloudnative-pg", "instance.yaml"), "metadata", "namespace")
+	selectors, _ := testutil.Dig(admissionFixture(t, "cloudnative-pg", "values.yaml"), "namespaceSelector").([]any)
 	inDatabaseSlice := slices.ContainsFunc(selectors, func(s any) bool {
-		return dig(s, "name") == instanceNamespace && dig(s, "labels", "mitstack.dev/database-slice") == "true"
+		return testutil.Dig(s, "name") == instanceNamespace && testutil.Dig(s, "labels", "mitstack.dev/database-slice") == "true"
 	})
-	failIf(t, !inDatabaseSlice, "values.yaml does not label %v, instance.yaml's namespace, mitstack.dev/database-slice=true", instanceNamespace)
+	testutil.FailIf(t, !inDatabaseSlice, "values.yaml does not label %v, instance.yaml's namespace, mitstack.dev/database-slice=true", instanceNamespace)
 }
 
 // ciliumEndpoint is a pod as Cilium labels it: its own labels under k8s:, its namespace's under io.cilium.k8s.namespace.labels.
@@ -118,18 +121,18 @@ func endpoint(namespace string, namespaceLabels, podLabels map[string]string) ci
 
 func (e ciliumEndpoint) selectedBy(t *testing.T, selector any) bool {
 	t.Helper()
-	fatalIf(t, selector == nil, "a rule names a nil selector")
-	labels, _ := dig(selector, "matchLabels").(map[string]any)
+	testutil.FatalIf(t, selector == nil, "a rule names a nil selector")
+	labels, _ := testutil.Dig(selector, "matchLabels").(map[string]any)
 	for k, v := range labels {
 		if got, ok := e[k]; !ok || got != v {
 			return false
 		}
 	}
-	expressions, _ := dig(selector, "matchExpressions").([]any)
+	expressions, _ := testutil.Dig(selector, "matchExpressions").([]any)
 	for _, x := range expressions {
-		key, _ := dig(x, "key").(string)
+		key, _ := testutil.Dig(x, "key").(string)
 		_, has := e[key]
-		switch dig(x, "operator") {
+		switch testutil.Dig(x, "operator") {
 		case "Exists":
 			if !has {
 				return false
@@ -139,7 +142,7 @@ func (e ciliumEndpoint) selectedBy(t *testing.T, selector any) bool {
 				return false
 			}
 		default:
-			t.Fatalf("the policy uses matchExpressions operator %v, which this test does not evaluate", dig(x, "operator"))
+			t.Fatalf("the policy uses matchExpressions operator %v, which this test does not evaluate", testutil.Dig(x, "operator"))
 		}
 	}
 	return true
@@ -161,11 +164,11 @@ var databaseSliceEndpoints = map[string]ciliumEndpoint{
 func rulePorts(t *testing.T, rule any) string {
 	t.Helper()
 	var ports []string
-	toPorts, _ := dig(rule, "toPorts").([]any)
+	toPorts, _ := testutil.Dig(rule, "toPorts").([]any)
 	for _, tp := range toPorts {
-		list, _ := dig(tp, "ports").([]any)
+		list, _ := testutil.Dig(tp, "ports").([]any)
 		for _, p := range list {
-			ports = append(ports, fmt.Sprintf("%v/%v", dig(p, "port"), dig(p, "protocol")))
+			ports = append(ports, fmt.Sprintf("%v/%v", testutil.Dig(p, "port"), testutil.Dig(p, "protocol")))
 		}
 	}
 	if len(ports) == 0 {
@@ -179,21 +182,21 @@ func grants(t *testing.T, policy map[string]any, name string) []string {
 	t.Helper()
 	ep := databaseSliceEndpoints[name]
 	specs, ok := policy["specs"].([]any)
-	fatalIf(t, !ok || len(specs) == 0, "the policy has no specs list")
+	testutil.FatalIf(t, !ok || len(specs) == 0, "the policy has no specs list")
 	var got []string
 	for _, spec := range specs {
-		if !ep.selectedBy(t, dig(spec, "endpointSelector")) {
+		if !ep.selectedBy(t, testutil.Dig(spec, "endpointSelector")) {
 			continue
 		}
 		for direction, peers := range map[string]string{"egress": "toEndpoints", "ingress": "fromEndpoints"} {
-			rules, _ := dig(spec, direction).([]any)
+			rules, _ := testutil.Dig(spec, direction).([]any)
 			for _, rule := range rules {
 				ports := rulePorts(t, rule)
-				entities, _ := dig(rule, "toEntities").([]any)
+				entities, _ := testutil.Dig(rule, "toEntities").([]any)
 				for _, e := range entities {
 					got = append(got, fmt.Sprintf("%s to entity %v on %s", direction, e, ports))
 				}
-				selectors, _ := dig(rule, peers).([]any)
+				selectors, _ := testutil.Dig(rule, peers).([]any)
 				for _, s := range selectors {
 					for _, peer := range slices.Sorted(maps.Keys(databaseSliceEndpoints)) {
 						if databaseSliceEndpoints[peer].selectedBy(t, s) {
@@ -202,7 +205,7 @@ func grants(t *testing.T, policy map[string]any, name string) []string {
 					}
 				}
 				for _, key := range []string{"fromEntities", "toCIDR", "toCIDRSet", "fromCIDR", "fromCIDRSet", "toFQDNs", "toServices"} {
-					failIf(t, dig(rule, key) != nil, "a %s rule uses %s, which this test does not evaluate", direction, key)
+					testutil.FailIf(t, testutil.Dig(rule, key) != nil, "a %s rule uses %s, which this test does not evaluate", direction, key)
 				}
 			}
 		}
@@ -214,9 +217,9 @@ func grants(t *testing.T, policy map[string]any, name string) []string {
 func databaseSlicesPolicyIn(t *testing.T, seed map[string]string) map[string]any {
 	t.Helper()
 	content, ok := seed[wantDatabaseSlicesPolicy]
-	fatalIf(t, !ok, "the seed writes no %s", wantDatabaseSlicesPolicy)
-	policy := yamlMap(t, wantDatabaseSlicesPolicy, content)
-	assertPaths(t, wantDatabaseSlicesPolicy, policy, map[string]any{
+	testutil.FatalIf(t, !ok, "the seed writes no %s", wantDatabaseSlicesPolicy)
+	policy := testutil.YamlMap(t, wantDatabaseSlicesPolicy, content)
+	testutil.AssertPaths(t, wantDatabaseSlicesPolicy, policy, map[string]any{
 		"apiVersion": "cilium.io/v2", "kind": "CiliumClusterwideNetworkPolicy", "metadata.name": "mitstack-database-slices",
 	})
 	return policy
@@ -253,7 +256,87 @@ func TestDatabaseSlicesPolicy_GrantsEachPodExactlyItsAllows(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := grants(t, policy, tc.pod)
 
-			failIf(t, !slices.Equal(got, tc.want), "the policy grants the %s pod %q, want exactly %q", tc.pod, got, tc.want)
+			testutil.FailIf(t, !slices.Equal(got, tc.want), "the policy grants the %s pod %q, want exactly %q", tc.pod, got, tc.want)
+		})
+	}
+}
+
+const (
+	// wantCloudNativePGTree is what `git rev-parse v0.5.0:cloudnative-pg` answers in mitstack-eu/cluster-bases.
+	wantCloudNativePGTree        = "761b32a055880d3840d5500a49b80205d30f1877"
+	wantCloudNativePGApplication = "cluster/cloudnative-pg.yaml"
+)
+
+func cloudSeed(t *testing.T) map[string]string {
+	t.Helper()
+	seed, err := RenderSeed(PinnedVersions, testutil.FixtureIngressIPv4, testutil.FixtureRepoURL)
+	testutil.FatalIf(t, err != nil, "RenderSeed: %v", err)
+	return seed
+}
+
+func dedicatedSeed(t *testing.T) map[string]string {
+	t.Helper()
+	seed, err := RenderDedicatedSeed(PinnedVersions, testutil.FixtureIngressIPv4, testutil.FixtureRepoURL)
+	testutil.FatalIf(t, err != nil, "RenderDedicatedSeed: %v", err)
+	return seed
+}
+
+// everyServerSeed is the repository a Cloud and a dedicated server each receive.
+func everyServerSeed(t *testing.T) map[string]func(t *testing.T) map[string]string {
+	t.Helper()
+	return map[string]func(t *testing.T) map[string]string{"a Cloud server": cloudSeed, "a dedicated server": dedicatedSeed}
+}
+
+func TestSeed_EveryServersRepositoryCarriesCloudNativePGAsTheClusterBasesReleaseHoldsIt(t *testing.T) {
+	for server, seed := range everyServerSeed(t) {
+		t.Run(server, func(t *testing.T) {
+			files := filesUnder(t, seed(t), wantCloudNativePGDir)
+
+			testutil.FatalIf(t, len(files) == 0, "%s's seed writes nothing under %s/, want cluster-bases %s's cloudnative-pg directory", server, wantCloudNativePGDir, wantClusterBasesTag)
+			got := gitTreeID(files)
+			testutil.FailIf(t, got != wantCloudNativePGTree, "the seed's %s/ is git tree %s holding %v, want %s, the tree of cloudnative-pg at cluster-bases %s", wantCloudNativePGDir, got, slices.Sorted(maps.Keys(files)), wantCloudNativePGTree, wantClusterBasesTag)
+		})
+	}
+}
+
+func TestSeed_EveryServersRepositorySyncsCloudNativePGIntoCnpgSystemInTheCRDWave(t *testing.T) {
+	for server, seed := range everyServerSeed(t) {
+		t.Run(server, func(t *testing.T) {
+			content, ok := seed(t)[wantCloudNativePGApplication]
+			testutil.FatalIf(t, !ok, "%s's seed writes no %s", server, wantCloudNativePGApplication)
+
+			app := testutil.YamlMap(t, wantCloudNativePGApplication, content)
+
+			testutil.AssertPaths(t, wantCloudNativePGApplication, app, map[string]any{
+				"kind":               "Application",
+				"metadata.name":      "cloudnative-pg",
+				"metadata.namespace": "argocd",
+				"metadata.annotations": map[string]any{
+					"argocd.argoproj.io/sync-wave":   "-1",
+					"mitstack.dev/cluster-bases-tag": wantClusterBasesTag,
+				},
+				"spec.source.repoURL":                      testutil.FixtureRepoURL,
+				"spec.source.path":                         wantCloudNativePGDir,
+				"spec.source.targetRevision":               "HEAD",
+				"spec.destination.server":                  "https://kubernetes.default.svc",
+				"spec.destination.namespace":               "cnpg-system",
+				"spec.syncPolicy.automated.prune":          true,
+				"spec.syncPolicy.automated.selfHeal":       true,
+				"spec.syncPolicy.syncOptions":              []any{"ServerSideApply=true"},
+				"spec.ignoreDifferences":                   nil,
+				"spec.syncPolicy.managedNamespaceMetadata": nil,
+			})
+		})
+	}
+}
+
+func TestDatabaseSlicesPolicy_EveryServersRepositoryCarriesIt(t *testing.T) {
+	for server, seed := range everyServerSeed(t) {
+		t.Run(server, func(t *testing.T) {
+			files := seed(t)
+			databaseSlicesPolicyIn(t, files)
+
+			testutil.AssertSameBytes(t, server+"'s "+wantDatabaseSlicesPolicy, files[wantDatabaseSlicesPolicy], testutil.ReadGolden(t, filepath.Join(goldenSeedDir(), filepath.Base(wantDatabaseSlicesPolicy))))
 		})
 	}
 }

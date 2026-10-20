@@ -20,6 +20,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/mitstack-eu/k3s-cluster-kit/testutil"
 )
 
 const (
@@ -29,7 +31,6 @@ const (
 	reportBodyMax         = reportBodyLimit - 1
 	osReleaseLimit        = 4096
 	kubernetesStderrLimit = 4096
-	redactedValue         = "<redacted>"
 	reportCloudInitBudget = 24000
 	reportJournalBudget   = 90000
 
@@ -82,7 +83,6 @@ var (
 
 	largestToolOutput    = strings.Repeat("\"\x01", 1<<17)
 	servedEnrolmentToken = strings.Repeat("c0ffee", 10) + "c0ff"
-	madeAtShape          = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$`)
 
 	reportJournalArgs = []string{
 		"-b", "--no-pager", "-o", "short-iso-precise",
@@ -122,23 +122,6 @@ func (c hardeningCommand) cannedOutput() string {
 	return testFile(c.canned)
 }
 
-func mustJSON(v any) string {
-	raw, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	return string(raw)
-}
-
-func mapKeys[V any](m map[string]V) []string { return slices.Sorted(maps.Keys(m)) }
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "..."
-}
-
 func lastLine(s string) string {
 	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
 	return lines[len(lines)-1]
@@ -158,40 +141,30 @@ func decodeAny(t *testing.T, what string, raw []byte) any {
 	t.Helper()
 	var v any
 	err := json.Unmarshal(raw, &v)
-	fatalIf(t, err != nil, "%s is not JSON: %v\n%s", what, err, truncate(string(raw), 300))
+	testutil.FatalIf(t, err != nil, "%s is not JSON: %v\n%s", what, err, testutil.Truncate(string(raw), 300))
 	return v
 }
 
 func sameJSON(t *testing.T, what string, got []byte, want string) {
 	t.Helper()
-	failIf(t, !reflect.DeepEqual(decodeAny(t, what, got), decodeAny(t, "the want for "+what, []byte(want))), "%s = %s\nwant exactly %s", what, truncate(string(got), 600), truncate(want, 600))
-}
-
-func objectOf(t *testing.T, what string, raw []byte, keys ...string) map[string]json.RawMessage {
-	t.Helper()
-	var m map[string]json.RawMessage
-	err := json.Unmarshal(raw, &m)
-	fatalIf(t, err != nil || m == nil, "%s = %s, want an object of %v", what, truncate(string(raw), 300), keys)
-	got, want := mapKeys(m), slices.Sorted(slices.Values(keys))
-	failIf(t, !slices.Equal(got, want), "%s has keys %v, want exactly %v", what, got, want)
-	return m
+	testutil.FailIf(t, !reflect.DeepEqual(decodeAny(t, what, got), decodeAny(t, "the want for "+what, []byte(want))), "%s = %s\nwant exactly %s", what, testutil.Truncate(string(got), 600), testutil.Truncate(want, 600))
 }
 
 func stringOf(t *testing.T, what string, raw []byte) string {
 	t.Helper()
 	var s string
 	err := json.Unmarshal(raw, &s)
-	fatalIf(t, err != nil, "%s = %s, want a string", what, truncate(string(raw), 300))
-	failIf(t, strings.ContainsRune(s, 0), "%s carries a NUL", what)
+	testutil.FatalIf(t, err != nil, "%s = %s, want a string", what, testutil.Truncate(string(raw), 300))
+	testutil.FailIf(t, strings.ContainsRune(s, 0), "%s carries a NUL", what)
 	return s
 }
 
-func reportFields(t *testing.T, req recordedEnrolRequest) map[string]json.RawMessage {
+func reportFields(t *testing.T, req testutil.RecordedEnrolRequest) map[string]json.RawMessage {
 	t.Helper()
-	return objectOf(t, "the report body", req.Body, reportBodyKeys...)
+	return testutil.ObjectOf(t, "the report body", req.Body, reportBodyKeys...)
 }
 
-func postedReport(t *testing.T, req recordedEnrolRequest) (bootID, journal string) {
+func postedReport(t *testing.T, req testutil.RecordedEnrolRequest) (bootID, journal string) {
 	t.Helper()
 	fields := reportFields(t, req)
 	return stringOf(t, "bootId", fields["bootId"]), stringOf(t, "journal", fields["journal"])
@@ -199,47 +172,36 @@ func postedReport(t *testing.T, req recordedEnrolRequest) (bootID, journal strin
 
 func assertNoNUL(t *testing.T, from string, body []byte) {
 	t.Helper()
-	failIf(t, strings.Contains(strings.ToLower(string(body)), `\u0000`) || bytes.ContainsRune(body, 0), "the report body carries a NUL from %s", from)
-}
-
-func assertUTCWithin(t *testing.T, v any, start, end time.Time) {
-	t.Helper()
-	s, ok := v.(string)
-	if !ok || !madeAtShape.MatchString(s) {
-		t.Errorf("time = %#v, want a UTC time written YYYY-MM-DDTHH:MM:SSZ", v)
-		return
-	}
-	at, err := time.Parse(time.RFC3339, s)
-	failIf(t, err != nil || at.Before(start.Truncate(time.Second).Add(-time.Second)) || at.After(end.Add(time.Second)), "time %s (parse err %v) is outside the run, %s to %s", s, err, start.UTC().Format(time.RFC3339), end.UTC().Format(time.RFC3339))
+	testutil.FailIf(t, strings.Contains(strings.ToLower(string(body)), `\u0000`) || bytes.ContainsRune(body, 0), "the report body carries a NUL from %s", from)
 }
 
 func assertNonEmptyList(t *testing.T, what string, raw []byte) {
 	t.Helper()
 	var items []json.RawMessage
 	err := json.Unmarshal(raw, &items)
-	failIf(t, err != nil || len(items) == 0, "%s = %s, want a list holding entries after a read that succeeded", what, truncate(string(raw), 200))
+	testutil.FailIf(t, err != nil || len(items) == 0, "%s = %s, want a list holding entries after a read that succeeded", what, testutil.Truncate(string(raw), 200))
 }
 
 func assertKubectlFailure(t *testing.T, what string, got []byte, exit int, message string) {
 	t.Helper()
-	f := objectOf(t, what, got, "exitStatus", "stderr")
+	f := testutil.ObjectOf(t, what, got, "exitStatus", "stderr")
 	var status int
 	err := json.Unmarshal(f["exitStatus"], &status)
-	failIf(t, err != nil, "%s.exitStatus = %s, want a number", what, f["exitStatus"])
-	failIf(t, (exit >= 0 && status != exit) || (exit < 0 && status == 0), "%s.exitStatus = %d, want %d (any non-zero if negative)", what, status, exit)
+	testutil.FailIf(t, err != nil, "%s.exitStatus = %s, want a number", what, f["exitStatus"])
+	testutil.FailIf(t, (exit >= 0 && status != exit) || (exit < 0 && status == 0), "%s.exitStatus = %d, want %d (any non-zero if negative)", what, status, exit)
 	stderr := stringOf(t, what+".stderr", f["stderr"])
-	failIf(t, strings.TrimSpace(stderr) == "" || len(stderr) > kubernetesStderrLimit || !strings.Contains(stderr, message), "%s.stderr = %q (%d bytes), want 1 to %d bytes of the failed read's stderr carrying %q", what, truncate(stderr, 200), len(stderr), kubernetesStderrLimit, message)
+	testutil.FailIf(t, strings.TrimSpace(stderr) == "" || len(stderr) > kubernetesStderrLimit || !strings.Contains(stderr, message), "%s.stderr = %q (%d bytes), want 1 to %d bytes of the failed read's stderr carrying %q", what, testutil.Truncate(stderr, 200), len(stderr), kubernetesStderrLimit, message)
 }
 
 func commandResult(t *testing.T, what string, raw []byte, limit int) (int, string) {
 	t.Helper()
-	m := objectOf(t, what, raw, "exitStatus", "output")
+	m := testutil.ObjectOf(t, what, raw, "exitStatus", "output")
 	var status int
 	err := json.Unmarshal(m["exitStatus"], &status)
-	failIf(t, err != nil, "%s.exitStatus = %s, want a number", what, m["exitStatus"])
+	testutil.FailIf(t, err != nil, "%s.exitStatus = %s, want a number", what, m["exitStatus"])
 	output := stringOf(t, what+".output", m["output"])
 	n := jsonTextLen(output)
-	failIf(t, n > limit, "%s.output is %d bytes of JSON text, want at most %d", what, n, limit)
+	testutil.FailIf(t, n > limit, "%s.output is %d bytes of JSON text, want at most %d", what, n, limit)
 	return status, output
 }
 
@@ -247,7 +209,7 @@ func assertCommandAnswered(t *testing.T, c hardeningCommand, hardening map[strin
 	t.Helper()
 	status, output := commandResult(t, "hardening."+c.field, hardening[c.field], c.limit)
 	want := strings.TrimRight(c.cannedOutput(), "\n")
-	failIf(t, status != c.exit || !strings.Contains(output, want), "hardening.%s = exitStatus %d, output %q, want %d and output carrying %q", c.field, status, truncate(output, 300), c.exit, want)
+	testutil.FailIf(t, status != c.exit || !strings.Contains(output, want), "hardening.%s = exitStatus %d, output %q, want %d and output carrying %q", c.field, status, testutil.Truncate(output, 300), c.exit, want)
 }
 
 func assertClusterField(t *testing.T, field string, got []byte) {
@@ -259,7 +221,7 @@ func assertClusterField(t *testing.T, field string, got []byte) {
 	case "subscriptionResources":
 		g, w = sortedBy(g, "namespace", "kind", "name"), sortedBy(w, "namespace", "kind", "name")
 	}
-	failIf(t, !reflect.DeepEqual(g, w), "%s = %s\nwant exactly %s", field, truncate(string(got), 600), truncate(testFile(wantClusterFields[field]), 600))
+	testutil.FailIf(t, !reflect.DeepEqual(g, w), "%s = %s\nwant exactly %s", field, testutil.Truncate(string(got), 600), testutil.Truncate(testFile(wantClusterFields[field]), 600))
 }
 
 func sortedBy(v any, members ...string) any {
@@ -299,24 +261,24 @@ func (r clusterRead) in(t *testing.T, fields map[string]json.RawMessage) []byte 
 	if r.part == "" {
 		return fields[r.field]
 	}
-	return objectOf(t, r.field, fields[r.field], "argocd", "cilium")[r.part]
+	return testutil.ObjectOf(t, r.field, fields[r.field], "argocd", "cilium")[r.part]
 }
 
 func dryRunResult(t *testing.T, raw []byte) (int, string) {
 	t.Helper()
-	m := objectOf(t, "podSecurityDryRun", raw, "exitStatus", "output")
+	m := testutil.ObjectOf(t, "podSecurityDryRun", raw, "exitStatus", "output")
 	var status int
 	var output string
-	failIf(t, json.Unmarshal(m["exitStatus"], &status) != nil || json.Unmarshal(m["output"], &output) != nil || len(output) > dryRunOutputLimit, "podSecurityDryRun = %s, want a numeric exitStatus and output of at most %d bytes", truncate(string(raw), 200), dryRunOutputLimit)
+	testutil.FailIf(t, json.Unmarshal(m["exitStatus"], &status) != nil || json.Unmarshal(m["output"], &output) != nil || len(output) > dryRunOutputLimit, "podSecurityDryRun = %s, want a numeric exitStatus and output of at most %d bytes", testutil.Truncate(string(raw), 200), dryRunOutputLimit)
 	return status, output
 }
 
 func assertDryRunAnswered(t *testing.T, raw []byte) {
 	t.Helper()
 	status, output := dryRunResult(t, raw)
-	failIf(t, status != 0, "podSecurityDryRun.exitStatus = %d, want 0", status)
+	testutil.FailIf(t, status != 0, "podSecurityDryRun.exitStatus = %d, want 0", status)
 	for _, line := range strings.Split(strings.TrimSpace(testFile("report/dry-run-stdout.txt")+testFile("report/dry-run-stderr.txt")), "\n") {
-		failIf(t, !strings.Contains(output, line), "podSecurityDryRun.output = %q, want it to carry %q", truncate(output, 300), line)
+		testutil.FailIf(t, !strings.Contains(output, line), "podSecurityDryRun.output = %q, want it to carry %q", testutil.Truncate(output, 300), line)
 	}
 }
 
@@ -328,12 +290,12 @@ func assertClusterAnsweredBut(t *testing.T, fields map[string]json.RawMessage, s
 	if skip.field != "podSecurityDryRun" {
 		assertDryRunAnswered(t, fields["podSecurityDryRun"])
 	}
-	for _, field := range mapKeys(wantClusterFields) {
+	for _, field := range testutil.MapKeys(wantClusterFields) {
 		switch {
 		case field == skip.field && field == "podMemory":
-			parts := objectOf(t, "podMemory", fields[field], "argocd", "cilium")
-			wantParts := objectOf(t, "the want for podMemory", []byte(testFile(wantClusterFields[field])), "argocd", "cilium")
-			for _, part := range mapKeys(wantParts) {
+			parts := testutil.ObjectOf(t, "podMemory", fields[field], "argocd", "cilium")
+			wantParts := testutil.ObjectOf(t, "the want for podMemory", []byte(testFile(wantClusterFields[field])), "argocd", "cilium")
+			for _, part := range testutil.MapKeys(wantParts) {
 				if part != skip.part {
 					sameJSON(t, "podMemory."+part, parts[part], string(wantParts[part]))
 				}
@@ -348,7 +310,7 @@ func assertMadeAt(t *testing.T, fields map[string]json.RawMessage, notBefore, no
 	t.Helper()
 	s := stringOf(t, "madeAt", fields["madeAt"])
 	at, err := time.Parse(time.RFC3339, s)
-	failIf(t, !madeAtShape.MatchString(s) || err != nil || at.Before(notBefore.Truncate(time.Second)) || at.After(notAfter), "madeAt = %q (parse err %v), want a UTC second within the run, %s to %s", s, err, notBefore.UTC().Format(time.RFC3339Nano), notAfter.UTC().Format(time.RFC3339Nano))
+	testutil.FailIf(t, !testutil.MadeAtShape.MatchString(s) || err != nil || at.Before(notBefore.Truncate(time.Second)) || at.After(notAfter), "madeAt = %q (parse err %v), want a UTC second within the run, %s to %s", s, err, notBefore.UTC().Format(time.RFC3339Nano), notAfter.UTC().Format(time.RFC3339Nano))
 	return at
 }
 
@@ -458,19 +420,19 @@ func runReportCases(t *testing.T, cases []reportCase) {
 }
 
 func TestReportScript_Contract(t *testing.T) {
-	host, collect, report := testRepoFile(t, "scripts/nodeagent/host.sh"), testRepoFile(t, "scripts/nodeagent/collect.sh"), testRepoFile(t, "scripts/nodeagent/report.sh")
+	host, collect, report := testutil.TestRepoFile(t, "scripts/nodeagent/host.sh"), testutil.TestRepoFile(t, "scripts/nodeagent/collect.sh"), testutil.TestRepoFile(t, "scripts/nodeagent/report.sh")
 	for what, script := range map[string]string{"host.sh": host, "collect.sh": collect, "report.sh": report} {
-		failIf(t, !shebangRe.MatchString(firstLine(script)), "%s starts with %q, want a POSIX sh shebang such as #!/bin/sh", what, firstLine(script))
-		failIf(t, jqRe.MatchString(script), "%s runs jq, which neither the image nor stock ubuntu-24.04 has", what)
-		failIf(t, strings.Contains(script, "hetzner/v1/metadata"), "%s reads hetzner/v1/metadata; the report reads only the user data, and the node script alone reads the metadata", what)
+		testutil.FailIf(t, !shebangRe.MatchString(testutil.FirstLine(script)), "%s starts with %q, want a POSIX sh shebang such as #!/bin/sh", what, testutil.FirstLine(script))
+		testutil.FailIf(t, jqRe.MatchString(script), "%s runs jq, which neither the image nor stock ubuntu-24.04 has", what)
+		testutil.FailIf(t, strings.Contains(script, "hetzner/v1/metadata"), "%s reads hetzner/v1/metadata; the report reads only the user data, and the node script alone reads the metadata", what)
 	}
 	assertTokenOffCurlLines(t, "collect.sh", collect, "TOKEN")
 	assertTokenOffCurlLines(t, "report.sh", report, "token")
 	// The tests override every default below, so only the source shows what a node uses.
-	assertNamesAll(t, "host.sh", host, "/run/mitstack-host")
-	assertNamesAll(t, "collect.sh", collect, "/etc/mitstack", "/etc/os-release", "/var/log/cloud-init-output.log", "http://169.254.169.254"+userDataPath,
-		"https://api.mitstack.dev"+enrolEndpointPath, "/var/lib/mitstack", "/var/log/unattended-upgrades/unattended-upgrades.log", "/var/run/reboot-required")
-	assertNamesAll(t, "report.sh", report, "https://api.mitstack.dev"+reportEndpointPath, "/var/run/mitstack/token", "/run/mitstack-host")
+	testutil.AssertNamesAll(t, "host.sh", host, "/run/mitstack-host")
+	testutil.AssertNamesAll(t, "collect.sh", collect, "/etc/mitstack", "/etc/os-release", "/var/log/cloud-init-output.log", "http://169.254.169.254"+userDataPath,
+		"https://api.mitstack.dev"+testutil.EnrolEndpointPath, "/var/lib/mitstack", "/var/log/unattended-upgrades/unattended-upgrades.log", "/var/run/reboot-required")
+	testutil.AssertNamesAll(t, "report.sh", report, "https://api.mitstack.dev"+testutil.ReportEndpointPath, "/var/run/mitstack/token", "/run/mitstack-host")
 }
 
 func TestReportScript_Delivery(t *testing.T) {
@@ -481,18 +443,18 @@ func TestReportScript_Delivery(t *testing.T) {
 	cases := []reportCase{
 		{name: "posts the boot id and the journal with the report token", check: func(t *testing.T, r *reportRig) {
 			req := r.req
-			failIf(t, req.Method != http.MethodPost || req.Path != reportEndpointPath || req.ContentType != "application/json", "the request was %s %s as %q, want POST %s as application/json", req.Method, req.Path, req.ContentType, reportEndpointPath)
-			want := "Bearer " + fixtureReportToken
-			failIf(t, req.Authorization != want, "the Authorization header is not Bearer and the reportToken from %s (%d characters received)", enrolScriptJSONFile, len(req.Authorization))
+			testutil.FailIf(t, req.Method != http.MethodPost || req.Path != testutil.ReportEndpointPath || req.ContentType != "application/json", "the request was %s %s as %q, want POST %s as application/json", req.Method, req.Path, req.ContentType, testutil.ReportEndpointPath)
+			want := "Bearer " + testutil.FixtureReportToken
+			testutil.FailIf(t, req.Authorization != want, "the Authorization header is not Bearer and the reportToken from %s (%d characters received)", testutil.EnrolScriptJSONFile, len(req.Authorization))
 			boot, journal := postedReport(t, req)
 			raw, err := os.ReadFile(bootIDPath)
-			failIf(t, err != nil || boot != strings.TrimSpace(string(raw)), "bootId = %q, want %q from %s (read err %v)", boot, raw, bootIDPath, err)
+			testutil.FailIf(t, err != nil || boot != strings.TrimSpace(string(raw)), "bootId = %q, want %q from %s (read err %v)", boot, raw, bootIDPath, err)
 			want2 := strings.Join(cannedJournal, "\n")
-			failIf(t, strings.TrimRight(journal, "\n") != want2, "journal = %q\nwant      %q", journal, want2)
+			testutil.FailIf(t, strings.TrimRight(journal, "\n") != want2, "journal = %q\nwant      %q", journal, want2)
 		}},
 		{name: "reads this boot's journal of the enrol, repo-token, k3s and metadata guard units", check: func(t *testing.T, r *reportRig) {
 			args := r.jctl.args(t)
-			fatalIf(t, args == nil, "the report script never ran %s\n%s", reportJournalctlEnv, r.run.output())
+			testutil.FatalIf(t, args == nil, "the report script never ran %s\n%s", testutil.ReportJournalctlEnv, r.run.Output())
 			limit := strconv.Itoa(reportJournalLimit)
 			var filter []string
 			for i := 0; i < len(args); i++ {
@@ -504,30 +466,30 @@ func TestReportScript_Delivery(t *testing.T) {
 					filter = append(filter, a)
 				}
 			}
-			failIf(t, !slices.Equal(filter, reportJournalArgs), "journalctl ran with %q\nwant              %q (and optionally -n %d)", args, reportJournalArgs, reportJournalLimit)
+			testutil.FailIf(t, !slices.Equal(filter, reportJournalArgs), "journalctl ran with %q\nwant              %q (and optionally -n %d)", args, reportJournalArgs, reportJournalLimit)
 		}},
 		{name: "sends only the last 500 journal lines", opts: []reportOption{withJournal(longJournal)}, check: func(t *testing.T, r *reportRig) {
 			_, got := postedReport(t, r.req)
 			gotLines, want := strings.Split(strings.TrimRight(got, "\n"), "\n"), longJournal[len(longJournal)-reportJournalLimit:]
-			failIf(t, !slices.Equal(gotLines, want), "the journal carries %d lines from %q to %q, want the last %d, %q to %q",
+			testutil.FailIf(t, !slices.Equal(gotLines, want), "the journal carries %d lines from %q to %q, want the last %d, %q to %q",
 				len(gotLines), gotLines[0], gotLines[len(gotLines)-1], reportJournalLimit, want[0], want[len(want)-1])
 		}},
 		{name: "keeps no token in its output, on a command line or under TMPDIR", opts: []reportOption{recording()}, check: func(t *testing.T, r *reportRig) {
-			assertQuietRun(t, "the report script", r.run, r.rec, r.srv.received())
+			assertQuietRun(t, "the report script", r.run, r.rec, r.srv.Received())
 		}},
 	}
 	for _, status := range []int{http.StatusOK, http.StatusAccepted, http.StatusNoContent} {
 		cases = append(cases, reportCase{name: "exits 0 on a " + strconv.Itoa(status), opts: []reportOption{withPlatform(status)}, check: func(t *testing.T, r *reportRig) {
-			n := len(r.srv.received())
-			failIf(t, n != 1, "the report script sent %d requests answered %d, want exactly one", n, status)
+			n := len(r.srv.Received())
+			testutil.FailIf(t, n != 1, "the report script sent %d requests answered %d, want exactly one", n, status)
 		}})
 	}
 	for _, status := range []int{401, 404, 429, 500, 503} {
 		why := "a " + strconv.Itoa(status)
 		cases = append(cases, reportCase{name: "exits non-zero on " + why + " after one attempt", opts: []reportOption{withPlatform(status)}, manual: true, check: func(t *testing.T, r *reportRig) {
 			assertExitedNonZero(t, why, r.exec())
-			n := len(r.srv.received())
-			failIf(t, n != 1, "the report script sent %d requests on %s, want exactly one: it does not retry", n, why)
+			n := len(r.srv.Received())
+			testutil.FailIf(t, n != 1, "the report script sent %d requests on %s, want exactly one: it does not retry", n, why)
 		}})
 	}
 	cases = append(cases, reportCase{name: "exits non-zero on a connection failure", opts: []reportOption{unreachablePlatform()}, manual: true, check: func(t *testing.T, r *reportRig) {
@@ -535,33 +497,33 @@ func TestReportScript_Delivery(t *testing.T) {
 	}})
 	for _, tc := range []struct{ name, token string }{
 		{"an empty report token", ""},
-		{"a report token of two lines", fixtureReportToken + "\n" + fixtureReportToken},
+		{"a report token of two lines", testutil.FixtureReportToken + "\n" + testutil.FixtureReportToken},
 	} {
 		cases = append(cases, reportCase{name: "fails with " + tc.name + " and sends nothing", opts: []reportOption{withToken(tc.token)}, manual: true, check: func(t *testing.T, r *reportRig) {
 			assertExitedNonZero(t, tc.name, r.exec())
-			n := len(r.srv.received())
-			failIf(t, n != 0, "the report script sent %d requests with %s, want none", n, tc.name)
+			n := len(r.srv.Received())
+			testutil.FailIf(t, n != 0, "the report script sent %d requests with %s, want none", n, tc.name)
 		}})
 	}
 	cases = append(cases, reportCase{name: "fails with no enrolment.json and sends nothing", opts: []reportOption{withEmptyDir()}, manual: true, check: func(t *testing.T, r *reportRig) {
 		assertExitedNonZero(t, "no enrolment.json", r.exec())
-		n := len(r.srv.received())
-		failIf(t, n != 0, "the report script sent %d requests with no enrolment.json, want none", n)
+		n := len(r.srv.Received())
+		testutil.FailIf(t, n != 0, "the report script sent %d requests with no enrolment.json, want none", n)
 	}})
 	runReportCases(t, cases)
 }
 
 func TestReportScript_RefusesAHostArchiveOlderThanFifteenMinutes(t *testing.T) {
-	srv := newFakeEnrolment(t, fixtureReportToken, http.StatusOK)
+	srv := testutil.NewFakeEnrolment(t, testutil.FixtureReportToken, http.StatusOK)
 	hostDir := t.TempDir()
 	old := time.Now().Add(-16 * time.Minute)
-	fatalIf(t, os.Chtimes(writeIn(t, hostDir, "host.tar", "", 0o644), old, old) != nil, "ageing host.tar")
-	env := []string{reportScriptURLEnv + "=" + srv.URL + reportEndpointPath, hostDirEnv + "=" + hostDir, tokenFileEnv + "=" + writeIn(t, t.TempDir(), "token", fixtureReportToken, 0o600)}
+	testutil.FatalIf(t, os.Chtimes(testutil.WriteIn(t, hostDir, "host.tar", "", 0o644), old, old) != nil, "ageing host.tar")
+	env := []string{testutil.ReportScriptURLEnv + "=" + srv.URL + testutil.ReportEndpointPath, hostDirEnv + "=" + hostDir, tokenFileEnv + "=" + testutil.WriteIn(t, t.TempDir(), "token", testutil.FixtureReportToken, 0o600)}
 
-	run := runShFile(t, "report", filepath.Join(nodeAgentDir(t), "mitstack-report"), reportRunBound, enrolRun{tmp: t.TempDir()}, env, srv.caFile, nil)
+	run := testutil.RunShFile(t, "report", filepath.Join(nodeAgentDir(t), "mitstack-report"), reportRunBound, testutil.EnrolRun{Tmp: t.TempDir()}, env, srv.CAFile, nil)
 
 	assertExitedNonZero(t, "a 16-minute-old host.tar", run)
-	failIf(t, len(srv.received()) != 0 || !strings.Contains(run.stderr, "older than 15 minutes"), "the report sent %d reports and printed %q, want none and why", len(srv.received()), run.stderr)
+	testutil.FailIf(t, len(srv.Received()) != 0 || !strings.Contains(run.Stderr, "older than 15 minutes"), "the report sent %d reports and printed %q, want none and why", len(srv.Received()), run.Stderr)
 }
 
 func TestReportScript_NodeEvidence(t *testing.T) {
@@ -575,14 +537,14 @@ func TestReportScript_NodeEvidence(t *testing.T) {
 	cases := []reportCase{
 		{name: "carries os-release verbatim", check: func(t *testing.T, r *reportRig) {
 			got := stringOf(t, "osRelease", reportFields(t, r.req)["osRelease"])
-			failIf(t, strings.TrimRight(got, "\n") != strings.TrimRight(testFile("report/os-release"), "\n"), "osRelease = %q\nwant the text of os-release", got)
+			testutil.FailIf(t, strings.TrimRight(got, "\n") != strings.TrimRight(testFile("report/os-release"), "\n"), "osRelease = %q\nwant the text of os-release", got)
 		}},
-		{name: "carries the last 300 lines of the cloud-init output log", opts: []reportOption{withSource(reportCloudInitLogEnv, "cloud-init-output.log", strings.Join(cloudInit, "\n")+"\n")}, check: func(t *testing.T, r *reportRig) {
+		{name: "carries the last 300 lines of the cloud-init output log", opts: []reportOption{withSource(testutil.ReportCloudInitLogEnv, "cloud-init-output.log", strings.Join(cloudInit, "\n")+"\n")}, check: func(t *testing.T, r *reportRig) {
 			got := strings.Split(strings.TrimRight(stringOf(t, "cloudInit", reportFields(t, r.req)["cloudInit"]), "\n"), "\n")
 			want := cloudInit[len(cloudInit)-reportCloudInitLimit:]
-			failIf(t, !slices.Equal(got, want), "cloudInit carries %d lines from %q to %q, want the last %d, %q to %q", len(got), got[0], got[len(got)-1], reportCloudInitLimit, want[0], want[len(want)-1])
+			testutil.FailIf(t, !slices.Equal(got, want), "cloudInit carries %d lines from %q to %q, want the last %d, %q to %q", len(got), got[0], got[len(got)-1], reportCloudInitLimit, want[0], want[len(want)-1])
 		}},
-		{name: "still reports without a cloud-init output log", opts: []reportOption{withEnvVar(reportCloudInitLogEnv, "/nonexistent/cloud-init-output.log")}, check: func(t *testing.T, r *reportRig) {
+		{name: "still reports without a cloud-init output log", opts: []reportOption{withEnvVar(testutil.ReportCloudInitLogEnv, "/nonexistent/cloud-init-output.log")}, check: func(t *testing.T, r *reportRig) {
 			stringOf(t, "cloudInit", reportFields(t, r.req)["cloudInit"])
 		}},
 		{name: "carries what k3s kubectl reads of the nodes and the Argo CD pods", check: func(t *testing.T, r *reportRig) {
@@ -597,41 +559,41 @@ func TestReportScript_NodeEvidence(t *testing.T) {
 				} `json:"items"`
 			}
 			err := json.Unmarshal(fields["kubernetes"], &nodes)
-			fatalIf(t, err != nil || len(nodes.Nodes) != 1, "kubernetes = %s, want one node", truncate(string(fields["kubernetes"]), 300))
+			testutil.FatalIf(t, err != nil || len(nodes.Nodes) != 1, "kubernetes = %s, want one node", testutil.Truncate(string(fields["kubernetes"]), 300))
 			err2 := json.Unmarshal([]byte(testFile("k3s/nodes.json")), &served)
-			fatalIf(t, err2 != nil, "the served nodes: %v", err2)
+			testutil.FatalIf(t, err2 != nil, "the served nodes: %v", err2)
 			for _, key := range []string{"capacity", "allocatable"} {
 				sameJSON(t, "kubernetes.nodes[0]."+key, nodes.Nodes[0][key], string(served.Items[0].Status[key]))
 			}
 			for _, call := range r.k3s.calls(t) {
-				failIf(t, !strings.HasPrefix(call, "kubectl ") && call != "secrets-encrypt status", "k3s ran with %q, want only k3s kubectl and k3s secrets-encrypt status", call)
-				failIf(t, strings.Contains(strings.ToLower(call), "kubeconfig"), "k3s kubectl ran with %q; as root it reads k3s's own admin config, and the report names no kubeconfig", call)
+				testutil.FailIf(t, !strings.HasPrefix(call, "kubectl ") && call != "secrets-encrypt status", "k3s ran with %q, want only k3s kubectl and k3s secrets-encrypt status", call)
+				testutil.FailIf(t, strings.Contains(strings.ToLower(call), "kubeconfig"), "k3s kubectl ran with %q; as root it reads k3s's own admin config, and the report names no kubeconfig", call)
 			}
 		}},
 		{name: "enrolment carries only field names with every value redacted", check: func(t *testing.T, r *reportRig) {
-			want := map[string]any{"repositoryToken": redactedValue, "repositoryTokenExpiresAt": redactedValue, "reportToken": redactedValue, "notificationToken": redactedValue}
+			want := map[string]any{"repositoryToken": testutil.RedactedValue, "repositoryTokenExpiresAt": testutil.RedactedValue, "reportToken": testutil.RedactedValue, "notificationToken": testutil.RedactedValue}
 			got := decodeAny(t, "enrolment", reportFields(t, r.req)["enrolment"])
-			failIf(t, !reflect.DeepEqual(got, want), "enrolment = %v, want %v", got, want)
+			testutil.FailIf(t, !reflect.DeepEqual(got, want), "enrolment = %v, want %v", got, want)
 		}},
-		{name: "enrolment redacts the values of an answer with more fields", opts: []reportOption{withAnswer(enrolAnswer(t, map[string]any{
-			"repositoryToken": fixtureRepositoryToken, "repositoryTokenExpiresAt": fixtureRepositoryTokenExpiresAt, "reportToken": fixtureReportToken,
+		{name: "enrolment redacts the values of an answer with more fields", opts: []reportOption{withAnswer(testutil.EnrolAnswer(t, map[string]any{
+			"repositoryToken": testutil.FixtureRepositoryToken, "repositoryTokenExpiresAt": testutil.FixtureRepositoryTokenExpiresAt, "reportToken": testutil.FixtureReportToken,
 			"issuedAt": "2026-10-01T09:14:03Z", "expiresIn": 3600}))}, check: func(t *testing.T, r *reportRig) {
-			want := map[string]any{"repositoryToken": redactedValue, "repositoryTokenExpiresAt": redactedValue, "reportToken": redactedValue, "issuedAt": redactedValue, "expiresIn": redactedValue}
+			want := map[string]any{"repositoryToken": testutil.RedactedValue, "repositoryTokenExpiresAt": testutil.RedactedValue, "reportToken": testutil.RedactedValue, "issuedAt": testutil.RedactedValue, "expiresIn": testutil.RedactedValue}
 			got := decodeAny(t, "enrolment", reportFields(t, r.req)["enrolment"])
-			failIf(t, !reflect.DeepEqual(got, want), "enrolment = %v, want %v", got, want)
+			testutil.FailIf(t, !reflect.DeepEqual(got, want), "enrolment = %v, want %v", got, want)
 		}},
 		{name: "madeAt is a UTC second within the run and no later than the report's first cluster read", opts: []reportOption{withK3s(k3sDelayingFirstCall(1100 * time.Millisecond))}, manual: true, check: func(t *testing.T, r *reportRig) {
 			start := time.Now()
 			r.send()
 			madeAt := assertMadeAt(t, reportFields(t, r.req), start, time.Now())
 			argvs, times := r.k3s.argvs(t), r.k3s.callTimes(t)
-			fatalIf(t, len(times) == 0 || len(times) != len(argvs), "the fake k3s recorded %d calls and %d call times, want one time for each call", len(argvs), len(times))
+			testutil.FatalIf(t, len(times) == 0 || len(times) != len(argvs), "the fake k3s recorded %d calls and %d call times, want one time for each call", len(argvs), len(times))
 			first := slices.IndexFunc(argvs, func(argv []string) bool {
 				return len(argv) > 2 && slices.Equal(argv[:3], []string{"kubectl", "get", "nodes"})
 			})
-			fatalIf(t, first < 0, "the report never read the nodes")
+			testutil.FatalIf(t, first < 0, "the report never read the nodes")
 			began := times[first].Truncate(time.Second)
-			failIf(t, madeAt.After(began), "madeAt = %s, later than the report's first read, %q, which began at %s", madeAt.UTC().Format(time.RFC3339), strings.Join(argvs[first], " "), times[first].UTC().Format(time.RFC3339Nano))
+			testutil.FailIf(t, madeAt.After(began), "madeAt = %s, later than the report's first read, %q, which began at %s", madeAt.UTC().Format(time.RFC3339), strings.Join(argvs[first], " "), times[first].UTC().Format(time.RFC3339Nano))
 		}},
 	}
 	for _, tc := range []struct {
@@ -640,7 +602,7 @@ func TestReportScript_NodeEvidence(t *testing.T) {
 		message string
 	}{
 		{"k3s not installed", withMissingK3s(), ""},
-		{"API server not up", withFailingK3s(k3sRefused + "\n"), k3sRefused},
+		{"API server not up", withFailingK3s(testutil.K3sRefused + "\n"), testutil.K3sRefused},
 		{"a megabyte of stderr", withFailingK3s(strings.Repeat("E", 1<<20) + "\n"), ""},
 	} {
 		cases = append(cases, reportCase{name: "records a k3s kubectl failure and still reports: " + tc.name, opts: []reportOption{tc.k3s}, check: func(t *testing.T, r *reportRig) {
@@ -664,7 +626,7 @@ func TestReportScript_NodeEvidence(t *testing.T) {
 	}{
 		{"journal", []reportOption{withJournal(append(slices.Clone(cannedJournal), "2026-10-01T09:16:00.000000+00:00 orbitdemo-abcd2345 k3s[900]: "+nul))},
 			func(t *testing.T, r *reportRig) string { _, j := postedReport(t, r.req); return j }},
-		{"cloud-init output log", []reportOption{withSource(reportCloudInitLogEnv, "cloud-init-output.log", testFile("report/cloud-init-output.log")+nul+"\n")},
+		{"cloud-init output log", []reportOption{withSource(testutil.ReportCloudInitLogEnv, "cloud-init-output.log", testFile("report/cloud-init-output.log")+nul+"\n")},
 			func(t *testing.T, r *reportRig) string {
 				return stringOf(t, "cloudInit", reportFields(t, r.req)["cloudInit"])
 			}},
@@ -682,7 +644,7 @@ func TestReportScript_NodeEvidence(t *testing.T) {
 			func(t *testing.T, r *reportRig) string {
 				var check struct{ OS struct{ Running string } }
 				err := json.Unmarshal(patchingFields(t, r)["check"], &check)
-				fatalIf(t, err != nil, "patching.check is not the kept check: %v", err)
+				testutil.FatalIf(t, err != nil, "patching.check is not the kept check: %v", err)
 				return check.OS.Running
 			}},
 	}
@@ -690,7 +652,7 @@ func TestReportScript_NodeEvidence(t *testing.T) {
 		cases = append(cases, reportCase{name: "a NUL byte in the " + s.name + " never reaches the body", opts: s.opts, check: func(t *testing.T, r *reportRig) {
 			assertNoNUL(t, s.name, r.req.Body)
 			got := s.field(t, r)
-			failIf(t, !strings.Contains(got, before) || !strings.Contains(got, after), "the %s field lost the text either side of the NUL: %q", s.name, truncate(got, 200))
+			testutil.FailIf(t, !strings.Contains(got, before) || !strings.Contains(got, after), "the %s field lost the text either side of the NUL: %q", s.name, testutil.Truncate(got, 200))
 		}})
 	}
 	runReportCases(t, cases)
@@ -713,59 +675,59 @@ func TestReportScript_EnrolmentReuseProbe(t *testing.T) {
 			end := time.Now()
 			got := reuse(t, r)
 			n := r.userData.hitCount(userDataPath)
-			failIf(t, n != 1, "the metadata service served the user data %d times, want once", n)
-			probes := r.probe.received()
-			fatalIf(t, len(probes) != 1, "the enrolment endpoint received %d probes, want exactly one", len(probes))
+			testutil.FailIf(t, n != 1, "the metadata service served the user data %d times, want once", n)
+			probes := r.probe.Received()
+			testutil.FatalIf(t, len(probes) != 1, "the enrolment endpoint received %d probes, want exactly one", len(probes))
 			p := probes[0]
-			failIf(t, p.Method != http.MethodPost || p.Path != enrolEndpointPath || p.ContentType != "application/json", "the probe was %s %s as %q, want POST %s as application/json", p.Method, p.Path, p.ContentType, enrolEndpointPath)
+			testutil.FailIf(t, p.Method != http.MethodPost || p.Path != testutil.EnrolEndpointPath || p.ContentType != "application/json", "the probe was %s %s as %q, want POST %s as application/json", p.Method, p.Path, p.ContentType, testutil.EnrolEndpointPath)
 			switch p.Authorization {
 			case "Bearer " + servedEnrolmentToken:
-			case "Bearer " + fixtureEnrolmentToken:
+			case "Bearer " + testutil.FixtureEnrolmentToken:
 				t.Error("the probe presented the token from enrolment.env, want the one the metadata service serves in the user data")
 			default:
 				t.Errorf("the probe's Authorization is not Bearer and the served enrolment token (%d characters received)", len(p.Authorization))
 			}
 			body := decodeAny(t, "the probe body", p.Body)
-			failIf(t, !reflect.DeepEqual(body, map[string]any{"subscriptionId": fixtureSubID}), "the probe body = %v, want exactly {subscriptionId: %s}", body, fixtureSubID)
-			keys := mapKeys(got)
-			failIf(t, !slices.Equal(keys, []string{"checkedAt", "status"}) || got["status"] != float64(http.StatusConflict), "enrolmentReuse = %v, want exactly status 409 and checkedAt", got)
-			assertUTCWithin(t, got["checkedAt"], start, end)
+			testutil.FailIf(t, !reflect.DeepEqual(body, map[string]any{"subscriptionId": testutil.FixtureSubID}), "the probe body = %v, want exactly {subscriptionId: %s}", body, testutil.FixtureSubID)
+			keys := testutil.MapKeys(got)
+			testutil.FailIf(t, !slices.Equal(keys, []string{"checkedAt", "status"}) || got["status"] != float64(http.StatusConflict), "enrolmentReuse = %v, want exactly status 409 and checkedAt", got)
+			testutil.AssertUTCWithin(t, got["checkedAt"], start, end)
 			keptPath := filepath.Join(r.dir, reuseResultFile)
 			raw, err := os.ReadFile(keptPath)
-			fatalIf(t, err != nil, "the probe kept no %s: %v", reuseResultFile, err)
+			testutil.FatalIf(t, err != nil, "the probe kept no %s: %v", reuseResultFile, err)
 			kept := decodeAny(t, reuseResultFile, raw)
-			failIf(t, !reflect.DeepEqual(kept, any(got)), "%s = %v, want the reported enrolmentReuse %v", reuseResultFile, kept, got)
+			testutil.FailIf(t, !reflect.DeepEqual(kept, any(got)), "%s = %v, want the reported enrolmentReuse %v", reuseResultFile, kept, got)
 			info, err := os.Stat(keptPath)
-			failIf(t, err != nil || info.Mode().Perm() != 0o600, "%s mode = %v (err %v), want 0600", reuseResultFile, info, err)
+			testutil.FailIf(t, err != nil || info.Mode().Perm() != 0o600, "%s mode = %v (err %v), want 0600", reuseResultFile, info, err)
 			r.send()
-			n2 := len(r.probe.received())
-			failIf(t, n2 != 1, "a second report probed again: %d probes in all, want one per node", n2)
+			n2 := len(r.probe.Received())
+			testutil.FailIf(t, n2 != 1, "a second report probed again: %d probes in all, want one per node", n2)
 			n3 := r.userData.hitCount(userDataPath)
-			failIf(t, n3 != 1, "a second report read the user data again: %d reads in all, want one", n3)
+			testutil.FailIf(t, n3 != 1, "a second report read the user data again: %d reads in all, want one", n3)
 			again := reuse(t, r)
-			failIf(t, !reflect.DeepEqual(again, got), "the second report's enrolmentReuse = %v, want the kept %v", again, got)
+			testutil.FailIf(t, !reflect.DeepEqual(again, got), "the second report's enrolmentReuse = %v, want the kept %v", again, got)
 		}},
 	}
 	for _, status := range []int{200, 204, 401, 403, 404, 409} {
-		cases = append(cases, reportCase{name: "keeps the " + http.StatusText(status) + " answer to the probe and acts on none", opts: setup(fixtureEnrolmentToken, serving(fixtureEnrolmentToken), status), check: func(t *testing.T, r *reportRig) {
+		cases = append(cases, reportCase{name: "keeps the " + http.StatusText(status) + " answer to the probe and acts on none", opts: setup(testutil.FixtureEnrolmentToken, serving(testutil.FixtureEnrolmentToken), status), check: func(t *testing.T, r *reportRig) {
 			got, _ := reuse(t, r)["status"].(float64)
-			failIf(t, int(got) != status, "enrolmentReuse.status = %v, want %d", got, status)
-			n := len(r.probe.received())
-			failIf(t, n != 1, "the enrolment endpoint received %d probes, want exactly one", n)
-			got2, err2 := os.ReadFile(filepath.Join(r.dir, enrolScriptJSONFile))
-			failIf(t, err2 != nil || string(got2) != enrolledAnswer(t), "the probe changed %s (err2 %v)", enrolScriptJSONFile, err2)
+			testutil.FailIf(t, int(got) != status, "enrolmentReuse.status = %v, want %d", got, status)
+			n := len(r.probe.Received())
+			testutil.FailIf(t, n != 1, "the enrolment endpoint received %d probes, want exactly one", n)
+			got2, err2 := os.ReadFile(filepath.Join(r.dir, testutil.EnrolScriptJSONFile))
+			testutil.FailIf(t, err2 != nil || string(got2) != enrolledAnswer(t), "the probe changed %s (err2 %v)", testutil.EnrolScriptJSONFile, err2)
 			entries, err := os.ReadDir(r.dir)
-			fatalIf(t, err != nil, "reading the enrolment directory: %v", err)
+			testutil.FatalIf(t, err != nil, "reading the enrolment directory: %v", err)
 			var names []string
 			for _, e := range entries {
 				names = append(names, e.Name())
 			}
-			want := []string{reuseResultFile, enrolScriptEnvFile, enrolScriptJSONFile}
-			failIf(t, !slices.Equal(names, want), "the enrolment directory holds %v, want exactly %v", names, want)
+			want := []string{reuseResultFile, testutil.EnrolScriptEnvFile, testutil.EnrolScriptJSONFile}
+			testutil.FailIf(t, !slices.Equal(names, want), "the enrolment directory holds %v, want exactly %v", names, want)
 			for _, sentinel := range []string{"enrol-sentinel-repository-read-key-0001", "enrol-sentinel-report-token-0001"} {
-				failIf(t, strings.Contains(string(r.req.Body), sentinel) || strings.Contains(r.run.output(), sentinel), "the probe's answer reached the report or the script's output")
+				testutil.FailIf(t, strings.Contains(string(r.req.Body), sentinel) || strings.Contains(r.run.Output(), sentinel), "the probe's answer reached the report or the script's output")
 				assertNothingLeftHolding(t, "the report script", r.dir, []string{sentinel})
-				assertNothingLeftHolding(t, "the report script", r.run.tmp, []string{sentinel})
+				assertNothingLeftHolding(t, "the report script", r.run.Tmp, []string{sentinel})
 			}
 		}})
 	}
@@ -774,18 +736,18 @@ func TestReportScript_EnrolmentReuseProbe(t *testing.T) {
 		statuses []int
 	}{{"endpoint unreachable", nil}, {"429 too many requests", []int{429}}, {"503 unavailable", []int{503}}} {
 		name, statuses := tc.name, tc.statuses
-		cases = append(cases, reportCase{name: "keeps nothing and probes again after " + name, opts: setup(fixtureEnrolmentToken, serving(fixtureEnrolmentToken), statuses...), manual: true, check: func(t *testing.T, r *reportRig) {
+		cases = append(cases, reportCase{name: "keeps nothing and probes again after " + name, opts: setup(testutil.FixtureEnrolmentToken, serving(testutil.FixtureEnrolmentToken), statuses...), manual: true, check: func(t *testing.T, r *reportRig) {
 			for run := 1; run <= 2; run++ {
 				r.send()
 				got, ok := reportFields(t, r.req)["enrolmentReuse"]
-				failIf(t, !ok || string(got) != "null", "report %d: enrolmentReuse = %s (present %v), want null after a probe that met no final answer", run, got, ok)
+				testutil.FailIf(t, !ok || string(got) != "null", "report %d: enrolmentReuse = %s (present %v), want null after a probe that met no final answer", run, got, ok)
 				_, err := os.Stat(filepath.Join(r.dir, reuseResultFile))
-				failIf(t, err == nil, "report %d: the probe kept %s after %s", run, reuseResultFile, name)
+				testutil.FailIf(t, err == nil, "report %d: the probe kept %s after %s", run, reuseResultFile, name)
 				n := r.userData.hitCount(userDataPath)
-				failIf(t, n != run, "report %d: the user data was read %d times in all, want %d: a probe that met no final answer runs again", run, n, run)
+				testutil.FailIf(t, n != run, "report %d: the user data was read %d times in all, want %d: a probe that met no final answer runs again", run, n, run)
 				if statuses != nil {
-					n := len(r.probe.received())
-					failIf(t, n != run, "report %d: the enrolment endpoint received %d probes in all, want %d", run, n, run)
+					n := len(r.probe.Received())
+					testutil.FailIf(t, n != run, "report %d: the enrolment endpoint received %d probes in all, want %d", run, n, run)
 				}
 			}
 		}})
@@ -798,51 +760,51 @@ func TestReportScript_EnrolmentReuseProbe(t *testing.T) {
 		{"user data without the token line", withUserData(http.StatusOK, "#cloud-config\nruncmd: []\n")},
 		{"metadata service unreachable", withUnreachableUserData()},
 	} {
-		cases = append(cases, reportCase{name: "sends no probe when the " + tc.name, opts: setup(fixtureEnrolmentToken, tc.userData, http.StatusConflict), check: func(t *testing.T, r *reportRig) {
-			n := len(r.probe.received())
-			failIf(t, n != 0, "the probe sent %d requests with no served enrolment token, want none", n)
+		cases = append(cases, reportCase{name: "sends no probe when the " + tc.name, opts: setup(testutil.FixtureEnrolmentToken, tc.userData, http.StatusConflict), check: func(t *testing.T, r *reportRig) {
+			n := len(r.probe.Received())
+			testutil.FailIf(t, n != 0, "the probe sent %d requests with no served enrolment token, want none", n)
 		}})
 	}
 	cases = append(cases, reportCase{name: "carries no node secret in the body, the probe, a command line or the kept result",
-		opts: append(setup(fixtureEnrolmentToken, serving(fixtureEnrolmentToken), http.StatusConflict), recording(), withAnswer(tokenAnswer(t, fixtureRepositoryToken, fixtureReportToken)),
-			withK3s(k3sServingSecret(fixtureRepositoryToken))),
+		opts: append(setup(testutil.FixtureEnrolmentToken, serving(testutil.FixtureEnrolmentToken), http.StatusConflict), recording(), withAnswer(testutil.TokenAnswer(t, testutil.FixtureRepositoryToken, testutil.FixtureReportToken)),
+			withK3s(k3sServingSecret(testutil.FixtureRepositoryToken))),
 		check: func(t *testing.T, r *reportRig) {
 			k3sLines := strings.Join(r.k3s.calls(t), "\n")
 			for _, read := range []string{"job", "helmchart", "app", "secret", argocdMetricsPath, kubeSystemMetricsPath, "plan", "system-upgrade", "kured"} {
-				failIf(t, !strings.Contains(k3sLines, read), "k3s kubectl never read %s, so the checks below never saw the token it serves:\n%s", read, k3sLines)
+				testutil.FailIf(t, !strings.Contains(k3sLines, read), "k3s kubectl never read %s, so the checks below never saw the token it serves:\n%s", read, k3sLines)
 			}
-			probes := r.probe.received()
-			fatalIf(t, len(probes) != 1, "the probe sent %d requests, want one, so the checks below would see no probe:\n%s", len(probes), r.run.output())
+			probes := r.probe.Received()
+			testutil.FatalIf(t, len(probes) != 1, "the probe sent %d requests, want one, so the checks below would see no probe:\n%s", len(probes), r.run.Output())
 			for _, sent := range []struct {
 				what string
-				req  recordedEnrolRequest
+				req  testutil.RecordedEnrolRequest
 			}{{"the probe", probes[0]}, {"the report", r.req}} {
-				failIf(t, !sent.req.SawClient, "no process command line carried the endpoint URL while %s was open, so the scan saw nothing", sent.what)
+				testutil.FailIf(t, !sent.req.SawClient, "no process command line carried the endpoint URL while %s was open, so the scan saw nothing", sent.what)
 				for _, line := range sent.req.TokenOnCmdline {
 					t.Errorf("a process command line carried the token %s presents while it was open: %s", sent.what, line)
 				}
 			}
 			lines := r.rec.commandLines(t)
-			fatalIf(t, !strings.Contains(lines, "curl "), "the recorder saw no curl command line, so it saw nothing the script ran:\n%s", lines)
+			testutil.FatalIf(t, !strings.Contains(lines, "curl "), "the recorder saw no curl command line, so it saw nothing the script ran:\n%s", lines)
 			kept, err := os.ReadFile(filepath.Join(r.dir, reuseResultFile))
-			fatalIf(t, err != nil, "the probe kept no %s: %v", reuseResultFile, err)
+			testutil.FatalIf(t, err != nil, "the probe kept no %s: %v", reuseResultFile, err)
 			secrets := []struct {
 				what      string
 				fragments []string
 			}{
-				{"the enrolment token", []string{fixtureEnrolmentToken}},
-				{"the report token", []string{fixtureReportToken}},
-				{"the repository token", []string{fixtureRepositoryToken, base64.StdEncoding.EncodeToString([]byte(fixtureRepositoryToken))}},
+				{"the enrolment token", []string{testutil.FixtureEnrolmentToken}},
+				{"the report token", []string{testutil.FixtureReportToken}},
+				{"the repository token", []string{testutil.FixtureRepositoryToken, base64.StdEncoding.EncodeToString([]byte(testutil.FixtureRepositoryToken))}},
 			}
 			places := []struct{ where, text string }{
-				{"the report body", string(r.req.Body)}, {"the probe body", string(probes[0].Body)}, {"the script's output", r.run.output()},
+				{"the report body", string(r.req.Body)}, {"the probe body", string(probes[0].Body)}, {"the script's output", r.run.Output()},
 				{"a command line the report script ran", lines}, {"a k3s kubectl command line", k3sLines}, {reuseResultFile, string(kept)},
 			}
 			for _, secret := range secrets {
 				for _, place := range places {
-					failIf(t, slices.ContainsFunc(secret.fragments, func(f string) bool { return strings.Contains(place.text, f) }), "%s carries %s", place.where, secret.what)
+					testutil.FailIf(t, slices.ContainsFunc(secret.fragments, func(f string) bool { return strings.Contains(place.text, f) }), "%s carries %s", place.where, secret.what)
 				}
-				assertNothingLeftHolding(t, "the report script", r.run.tmp, secret.fragments)
+				assertNothingLeftHolding(t, "the report script", r.run.Tmp, secret.fragments)
 			}
 		}})
 	runReportCases(t, cases)
@@ -861,8 +823,8 @@ func TestClosedAddr_RefusesConnectionsAndNoListenerCanTakeItWhileItsTestRuns(t *
 		_ = l.Close()
 	}
 
-	failIf(t, !errors.Is(dialErr, syscall.ECONNREFUSED), "dialling the closed address %s error = %v; want connection refused", addr, dialErr)
-	failIf(t, listenErr == nil, "net.Listen(%q) succeeded; want the closed address held while its test runs, so no parallel test's fake answers for it", addr)
+	testutil.FailIf(t, !errors.Is(dialErr, syscall.ECONNREFUSED), "dialling the closed address %s error = %v; want connection refused", addr, dialErr)
+	testutil.FailIf(t, listenErr == nil, "net.Listen(%q) succeeded; want the closed address held while its test runs, so no parallel test's fake answers for it", addr)
 }
 
 func servedUserData(t *testing.T, token string) string {
@@ -883,20 +845,20 @@ func assertCertManagerRead(t *testing.T, calls []k3sCall, names []string) {
 		reads++
 		_, all := c.flags["-A"]
 		_, allLong := c.flags["--all-namespaces"]
-		failIf(t, !all && !allLong || c.flags["--output"] != "json" || c.flags["--request-timeout"] != "10s",
+		testutil.FailIf(t, !all && !allLong || c.flags["--output"] != "json" || c.flags["--request-timeout"] != "10s",
 			"k3s kubectl read %s with %q, want -A -o json --request-timeout=10s", names[0], c.line())
 	}
-	failIf(t, reads != 1, "k3s kubectl read %s %d times, want once", names[0], reads)
+	testutil.FailIf(t, reads != 1, "k3s kubectl read %s %d times, want once", names[0], reads)
 }
 
 func TestReportScript_ClusterFields(t *testing.T) {
 	r := newReportRig(t).send()
 	fields, calls := reportFields(t, r.req), k3sCallsOf(t, r.k3s)
-	body, out := string(r.req.Body), r.run.output()
+	body, out := string(r.req.Body), r.run.Output()
 	noSecret := func(t *testing.T, what string, values ...string) {
 		t.Helper()
 		for _, v := range values {
-			failIf(t, strings.Contains(body, v) || strings.Contains(out, v), "the report body or output carries %q, %s", v, what)
+			testutil.FailIf(t, strings.Contains(body, v) || strings.Contains(out, v), "the report body or output carries %q, %s", v, what)
 		}
 	}
 	encoded := base64.StdEncoding.EncodeToString([]byte(clusterSecretSentinel))
@@ -918,7 +880,7 @@ func TestReportScript_ClusterFields(t *testing.T) {
 		{"applications", func(t *testing.T) {
 			noSecret(t, "an Application's annotations", clusterSecretSentinel)
 			for _, c := range calls {
-				failIf(t, strings.Contains(c.line(), "application") && c.flags["--namespace"] != "argocd" && !strings.Contains(c.flags["--selector"], subscriptionLabel), "k3s kubectl read Applications with %q, want the argocd namespace", c.line())
+				testutil.FailIf(t, strings.Contains(c.line(), "application") && c.flags["--namespace"] != "argocd" && !strings.Contains(c.flags["--selector"], subscriptionLabel), "k3s kubectl read Applications with %q, want the argocd namespace", c.line())
 			}
 		}},
 		{"repositorySecrets", func(t *testing.T) {
@@ -930,18 +892,18 @@ func TestReportScript_ClusterFields(t *testing.T) {
 				reads++
 				_, raw := c.flags["--raw"]
 				_, sorted := c.flags["--sort-by"]
-				failIf(t, c.verb != "get" || raw || sorted || !slices.Contains([]string{"", "wide", "name", "json"}, c.flags["--output"]), "k3s kubectl read Secrets other than with a get of kubectl's table, names or JSON: %q", c.line())
+				testutil.FailIf(t, c.verb != "get" || raw || sorted || !slices.Contains([]string{"", "wide", "name", "json"}, c.flags["--output"]), "k3s kubectl read Secrets other than with a get of kubectl's table, names or JSON: %q", c.line())
 				if strings.Contains(c.flags["--selector"], subscriptionLabel) {
 					continue
 				}
-				failIf(t, c.flags["--namespace"] != "argocd" || !strings.Contains(c.flags["--selector"], "argocd.argoproj.io/secret-type"), "k3s kubectl read Secrets outside the argocd namespace or without selecting argocd.argoproj.io/secret-type: %q", c.line())
+				testutil.FailIf(t, c.flags["--namespace"] != "argocd" || !strings.Contains(c.flags["--selector"], "argocd.argoproj.io/secret-type"), "k3s kubectl read Secrets outside the argocd namespace or without selecting argocd.argoproj.io/secret-type: %q", c.line())
 			}
-			failIf(t, reads == 0, "k3s kubectl never read the argocd Secrets; it ran with %q", r.k3s.calls(t))
+			testutil.FailIf(t, reads == 0, "k3s kubectl never read the argocd Secrets; it ran with %q", r.k3s.calls(t))
 			noSecret(t, "a Secret's data, annotation or unlabelled name", clusterSecretSentinel, encoded, "eC1hY2Nlc3MtdG9rZW4=", "aHR0cHM6Ly9naXRodWIuY29t", "argocd-secret")
-			archive, err := os.ReadFile(r.run.hostTar)
-			fatalIf(t, err != nil, "reading host.tar: %v", err)
+			archive, err := os.ReadFile(r.run.HostTar)
+			testutil.FatalIf(t, err != nil, "reading host.tar: %v", err)
 			for _, v := range []string{clusterSecretSentinel, encoded} {
-				failIf(t, strings.Contains(string(archive), v), "host.tar carries %q, so a Secret's data reaches the report container", v)
+				testutil.FailIf(t, strings.Contains(string(archive), v), "host.tar carries %q, so a Secret's data reaches the report container", v)
 			}
 		}},
 		{"appProjects", func(t *testing.T) {
@@ -950,14 +912,14 @@ func TestReportScript_ClusterFields(t *testing.T) {
 			for _, c := range calls {
 				if c.verb == "get" && slices.ContainsFunc(c.resources(), func(w string) bool { return strings.HasPrefix(w, "appproject") }) && !strings.Contains(c.flags["--selector"], subscriptionLabel) {
 					reads++
-					failIf(t, c.flags["--namespace"] != "argocd" || c.flags["--output"] != "json", "k3s kubectl read the AppProjects with %q, want -n argocd -o json", c.line())
+					testutil.FailIf(t, c.flags["--namespace"] != "argocd" || c.flags["--output"] != "json", "k3s kubectl read the AppProjects with %q, want -n argocd -o json", c.line())
 				}
 			}
-			failIf(t, reads != 1, "k3s kubectl read the argocd AppProjects %d times, want once", reads)
+			testutil.FailIf(t, reads != 1, "k3s kubectl read the argocd AppProjects %d times, want once", reads)
 		}},
 		{"podMemory", func(t *testing.T) {
 			for _, path := range []string{argocdMetricsPath, kubeSystemMetricsPath} {
-				failIf(t, !slices.ContainsFunc(calls, func(c k3sCall) bool { return strings.Contains(c.flags["--raw"], path) }), "k3s kubectl never read %s with get --raw", path)
+				testutil.FailIf(t, !slices.ContainsFunc(calls, func(c k3sCall) bool { return strings.Contains(c.flags["--raw"], path) }), "k3s kubectl never read %s with get --raw", path)
 			}
 		}},
 		{"podSecurity", func(t *testing.T) {
@@ -966,39 +928,39 @@ func TestReportScript_ClusterFields(t *testing.T) {
 			for _, c := range calls {
 				if words := c.resources(); c.verb == "get" && len(words) == 1 && slices.Contains([]string{"namespaces", "namespace", "ns"}, words[0]) && !strings.Contains(c.flags["--selector"], subscriptionLabel) {
 					reads++
-					failIf(t, c.flags["--output"] != "json", "k3s kubectl read the namespaces for podSecurity with %q, want -o json", c.line())
+					testutil.FailIf(t, c.flags["--output"] != "json", "k3s kubectl read the namespaces for podSecurity with %q, want -o json", c.line())
 				}
 			}
-			failIf(t, reads != 1, "k3s kubectl read the namespaces for podSecurity %d times, want once", reads)
+			testutil.FailIf(t, reads != 1, "k3s kubectl read the namespaces for podSecurity %d times, want once", reads)
 		}},
 		{"subscriptionResources", func(t *testing.T) {
 			secretReadCount := 0
 			for _, c := range calls {
 				raw, ok := c.flags["--raw"]
-				failIf(t, ok && strings.Contains(raw, "secrets"), "k3s kubectl read Secrets with --raw, which fetches their data: %q", c.line())
+				testutil.FailIf(t, ok && strings.Contains(raw, "secrets"), "k3s kubectl read Secrets with --raw, which fetches their data: %q", c.line())
 				if !strings.Contains(c.flags["--selector"], subscriptionLabel) || !slices.ContainsFunc(c.resources(), func(w string) bool { return w == "secret" || w == "secrets" }) {
 					continue
 				}
 				secretReadCount++
 				_, sorted := c.flags["--sort-by"]
 				_, templated := c.flags["--template"]
-				failIf(t, c.verb != "get" || sorted || templated || !slices.Contains([]string{"", "wide", "name"}, c.flags["--output"]), "k3s kubectl read Secrets other than with a get of kubectl's table or names: %q", c.line())
+				testutil.FailIf(t, c.verb != "get" || sorted || templated || !slices.Contains([]string{"", "wide", "name"}, c.flags["--output"]), "k3s kubectl read Secrets other than with a get of kubectl's table or names: %q", c.line())
 			}
-			failIf(t, secretReadCount == 0, "no k3s kubectl get selecting %s named Secrets", subscriptionLabel)
+			testutil.FailIf(t, secretReadCount == 0, "no k3s kubectl get selecting %s named Secrets", subscriptionLabel)
 			noSecret(t, "a Secret's data or annotation", clusterSecretSentinel, encoded)
 		}},
 		{"jwks", func(t *testing.T) {
 			got := fields["jwks"]
-			fatalIf(t, len(got) == 0 || got[0] != '{', "jwks = %s, want the key set as a JSON object", truncate(string(got), 200))
+			testutil.FatalIf(t, len(got) == 0 || got[0] != '{', "jwks = %s, want the key set as a JSON object", testutil.Truncate(string(got), 200))
 			reads := 0
 			for _, c := range calls {
 				if c.verb == "get" && c.flags["--raw"] == jwksPath {
 					reads++
 					got := c.flags["--request-timeout"]
-					failIf(t, got != "10s", "k3s kubectl read the key set with --request-timeout %q, want 10s: %q", got, c.argv)
+					testutil.FailIf(t, got != "10s", "k3s kubectl read the key set with --request-timeout %q, want 10s: %q", got, c.argv)
 				}
 			}
-			failIf(t, reads != 1, "k3s kubectl read get --raw %s %d times, want once", jwksPath, reads)
+			testutil.FailIf(t, reads != 1, "k3s kubectl read get --raw %s %d times, want once", jwksPath, reads)
 		}},
 		{"admission", func(t *testing.T) {
 			reads, applies := 0, 0
@@ -1006,15 +968,15 @@ func TestReportScript_ClusterFields(t *testing.T) {
 				switch {
 				case c.verb == "get" && c.names("admission-fixtures", "configmap", "configmaps", "cm"):
 					reads++
-					failIf(t, !slices.Contains([]string{admissionNamespace, "mitstack-node"}, c.flags["--namespace"]) || c.flags["--output"] != "json" || c.flags["--request-timeout"] != "10s", "k3s kubectl read the fixtures with %q, want the ConfigMap admission-fixtures in %s or mitstack-node as JSON with --request-timeout=10s", c.line(), admissionNamespace)
+					testutil.FailIf(t, !slices.Contains([]string{admissionNamespace, "mitstack-node"}, c.flags["--namespace"]) || c.flags["--output"] != "json" || c.flags["--request-timeout"] != "10s", "k3s kubectl read the fixtures with %q, want the ConfigMap admission-fixtures in %s or mitstack-node as JSON with --request-timeout=10s", c.line(), admissionNamespace)
 				case c.verb == "apply":
 					applies++
-					failIf(t, c.flags["--dry-run"] != "server" || c.flags["--namespace"] != admissionNamespace || c.flags["--filename"] != "-" || c.flags["--request-timeout"] != "10s",
+					testutil.FailIf(t, c.flags["--dry-run"] != "server" || c.flags["--namespace"] != admissionNamespace || c.flags["--filename"] != "-" || c.flags["--request-timeout"] != "10s",
 						"k3s kubectl applied with %q, want --dry-run=server -n %s -f - and --request-timeout=10s", c.line(), admissionNamespace)
 				}
 			}
-			failIf(t, reads != 2, "k3s kubectl read an admission-fixtures ConfigMap %d times, want once in each namespace", reads)
-			failIf(t, applies != 6, "k3s kubectl applied %d fixtures, want one per rule, 6", applies)
+			testutil.FailIf(t, reads != 2, "k3s kubectl read an admission-fixtures ConfigMap %d times, want once in each namespace", reads)
+			testutil.FailIf(t, applies != 6, "k3s kubectl applied %d fixtures, want one per rule, 6", applies)
 		}},
 		{"defaultDenyPolicies", func(t *testing.T) {
 			reads := 0
@@ -1025,10 +987,10 @@ func TestReportScript_ClusterFields(t *testing.T) {
 				reads++
 				_, all := c.flags["-A"]
 				_, allLong := c.flags["--all-namespaces"]
-				failIf(t, !all && !allLong || c.flags["--field-selector"] != "metadata.name=mitstack-default-deny" || c.flags["--output"] != "json" || c.flags["--request-timeout"] != "10s",
+				testutil.FailIf(t, !all && !allLong || c.flags["--field-selector"] != "metadata.name=mitstack-default-deny" || c.flags["--output"] != "json" || c.flags["--request-timeout"] != "10s",
 					"k3s kubectl read NetworkPolicies with %q, want -A --field-selector metadata.name=mitstack-default-deny -o json --request-timeout=10s", c.line())
 			}
-			failIf(t, reads != 1, "k3s kubectl read the generated NetworkPolicies %d times, want once", reads)
+			testutil.FailIf(t, reads != 1, "k3s kubectl read the generated NetworkPolicies %d times, want once", reads)
 		}},
 		{"certificates", func(t *testing.T) {
 			assertCertManagerRead(t, calls, []string{"certificates", "certificate", "cert", "certificates.cert-manager.io"})
@@ -1045,10 +1007,10 @@ func TestReportScript_ClusterFields(t *testing.T) {
 				}
 				reads++
 				_, all := c.flags["-A"]
-				failIf(t, !slices.Equal(c.resources(), want) || !all || c.flags["--output"] != "json" || c.flags["--request-timeout"] != "10s",
+				testutil.FailIf(t, !slices.Equal(c.resources(), want) || !all || c.flags["--output"] != "json" || c.flags["--request-timeout"] != "10s",
 					"k3s kubectl read CloudNativePG with %q, want get %s -A -o json --request-timeout=10s", c.line(), strings.Join(want, ","))
 			}
-			failIf(t, reads != 1, "k3s kubectl read CloudNativePG's objects %d times, want once, in a read of its own", reads)
+			testutil.FailIf(t, reads != 1, "k3s kubectl read CloudNativePG's objects %d times, want once, in a read of its own", reads)
 		}},
 	}
 	for _, c := range checks {
@@ -1064,14 +1026,14 @@ func TestReportScript_ClusterFields(t *testing.T) {
 			switch {
 			case c.line() == "secrets-encrypt status":
 			case c.verb == "exec":
-				failIf(t, c.flags["--namespace"] != "kube-system" || !slices.Contains([]string{ciliumStatusCommand, hubbleObserveCommand}, strings.Join(c.command, " ")), "k3s kubectl ran %q; the report execs only %s and %s in kube-system", c.line(), ciliumStatusCommand, hubbleObserveCommand)
+				testutil.FailIf(t, c.flags["--namespace"] != "kube-system" || !slices.Contains([]string{ciliumStatusCommand, hubbleObserveCommand}, strings.Join(c.command, " ")), "k3s kubectl ran %q; the report execs only %s and %s in kube-system", c.line(), ciliumStatusCommand, hubbleObserveCommand)
 			case c.verb == "logs" && c.flags["--namespace"] == "kube-system":
-				failIf(t, !c.names("kured", "ds", "daemonset", "daemonsets"), "k3s kubectl ran %q; in kube-system the report reads only the log of ds/kured", c.line())
+				testutil.FailIf(t, !c.names("kured", "ds", "daemonset", "daemonsets"), "k3s kubectl ran %q; in kube-system the report reads only the log of ds/kured", c.line())
 			case slices.Contains([]string{"create", "run", "wait", "logs", "delete"}, c.verb):
-				failIf(t, !strings.Contains(c.line(), metadataProbeNamespace), "k3s kubectl ran %q outside the metadata probe's namespace %s", c.line(), metadataProbeNamespace)
+				testutil.FailIf(t, !strings.Contains(c.line(), metadataProbeNamespace), "k3s kubectl ran %q outside the metadata probe's namespace %s", c.line(), metadataProbeNamespace)
 			case c.verb == "get":
 			case c.verb == "apply":
-				failIf(t, c.flags["--dry-run"] != "server", "k3s kubectl ran %q; the report applies only as --dry-run=server, which persists nothing", c.line())
+				testutil.FailIf(t, c.flags["--dry-run"] != "server", "k3s kubectl ran %q; the report applies only as --dry-run=server, which persists nothing", c.line())
 			case c.verb == "label":
 				labels++
 				_, overwrite := c.flags["--overwrite"]
@@ -1083,7 +1045,7 @@ func TestReportScript_ClusterFields(t *testing.T) {
 				t.Errorf("k3s kubectl ran %q; the report only reads, dry-runs and probes the metadata service in its own namespace", c.line())
 			}
 		}
-		failIf(t, labels != 1, "k3s kubectl labelled %d times, want the one dry run", labels)
+		testutil.FailIf(t, labels != 1, "k3s kubectl labelled %d times, want the one dry run", labels)
 	})
 }
 
@@ -1106,7 +1068,7 @@ func certificateIn(namespace, name, status, reason, message string) map[string]a
 }
 
 func extremeList(items []any) string {
-	return mustJSON(map[string]any{"apiVersion": "v1", "kind": "List", "metadata": map[string]any{"resourceVersion": ""}, "items": items})
+	return testutil.MustJSON(map[string]any{"apiVersion": "v1", "kind": "List", "metadata": map[string]any{"resourceVersion": ""}, "items": items})
 }
 
 func jwksOfLength(size int) string {
@@ -1187,13 +1149,13 @@ func largestNonASCIICheck(t *testing.T) string {
 	t.Helper()
 	var check map[string]any
 	err := json.Unmarshal([]byte(testFile("report/patch-check.json")), &check)
-	fatalIf(t, err != nil, "the canned patch check: %v", err)
+	testutil.FatalIf(t, err != nil, "the canned patch check: %v", err)
 	osPart := check["os"].(map[string]any)
 	for n := 1; ; n++ {
 		osPart["running"] = strings.Repeat("é", n)
-		if len(mustJSON(check)) > patchCheckFileLimit-2 {
+		if len(testutil.MustJSON(check)) > patchCheckFileLimit-2 {
 			osPart["running"] = strings.Repeat("é", n-1)
-			return mustJSON(check)
+			return testutil.MustJSON(check)
 		}
 	}
 }
@@ -1230,7 +1192,7 @@ func TestReportScript_ClusterReadsFailIndependently(t *testing.T) {
 			fields := reportFields(t, r.req)
 			if rd.field == "podSecurityDryRun" {
 				status, output := dryRunResult(t, fields[rd.field])
-				failIf(t, status != 1 || !strings.Contains(output, message), "podSecurityDryRun = %s, want exitStatus 1 and the failed dry run's stderr", fields[rd.field])
+				testutil.FailIf(t, status != 1 || !strings.Contains(output, message), "podSecurityDryRun = %s, want exitStatus 1 and the failed dry run's stderr", fields[rd.field])
 			} else {
 				assertKubectlFailure(t, rd.name(), rd.in(t, fields), 1, message)
 			}
@@ -1248,8 +1210,8 @@ func TestReportScript_ClusterReadsFailIndependently(t *testing.T) {
 	sub := clusterRead{readSubscriptionResources, "subscriptionResources", ""}
 	for _, tc := range []struct{ name, stdout string }{
 		{"a single column", "orbitdemo\n"},
-		{"no kind/name column", "orbitdemo   configmap   " + fixtureSubID + "\n"},
-		{"a good row then a stray", "orbitdemo   configmap/orbitdemo-config   " + fixtureSubID + "\nstray\n"},
+		{"no kind/name column", "orbitdemo   configmap   " + testutil.FixtureSubID + "\n"},
+		{"a good row then a stray", "orbitdemo   configmap/orbitdemo-config   " + testutil.FixtureSubID + "\nstray\n"},
 	} {
 		cases = append(cases, reportCase{name: "a labelled objects row out of shape (" + tc.name + ") records why and every other field reports", opts: []reportOption{withK3s(k3sPrinting(sub.read, tc.stdout))}, check: func(t *testing.T, r *reportRig) {
 			fields := reportFields(t, r.req)
@@ -1265,7 +1227,7 @@ func TestReportScript_ClusterReadsFailIndependently(t *testing.T) {
 		return func(t *testing.T, got []byte) {
 			var entries []any
 			err := json.Unmarshal(got, &entries)
-			failIf(t, err != nil || entries == nil || !reflect.DeepEqual(entries, want), "subscriptionResources = %s (err %v), want the first %d rows of the table in order", truncate(string(got), 300), err, len(want))
+			testutil.FailIf(t, err != nil || entries == nil || !reflect.DeepEqual(entries, want), "subscriptionResources = %s (err %v), want the first %d rows of the table in order", testutil.Truncate(string(got), 300), err, len(want))
 		}
 	}
 	for _, c := range []struct {
@@ -1290,10 +1252,10 @@ func TestReportScript_ClusterReadsFailIndependently(t *testing.T) {
 			c.check(t, fields["subscriptionResources"])
 			var complete bool
 			err := json.Unmarshal(fields["subscriptionResourcesComplete"], &complete)
-			failIf(t, err != nil || complete != c.complete, "subscriptionResourcesComplete = %s (err %v), want %v", fields["subscriptionResourcesComplete"], err, c.complete)
+			testutil.FailIf(t, err != nil || complete != c.complete, "subscriptionResourcesComplete = %s (err %v), want %v", fields["subscriptionResourcesComplete"], err, c.complete)
 		}})
 	}
-	unread := mustJSON(map[string]any{"exitStatus": 0, "stderr": jwksUnreadable})
+	unread := testutil.MustJSON(map[string]any{"exitStatus": 0, "stderr": jwksUnreadable})
 	for _, tc := range []struct{ name, stdout, want string }{
 		{"a key set of exactly the bound", jwksOfLength(jwksLimit), jwksOfLength(jwksLimit)},
 		{"a key set a byte past it", jwksOfLength(jwksLimit + 1), unread},
@@ -1317,18 +1279,18 @@ func TestReportScript_ClusterReadsFailIndependently(t *testing.T) {
 		}{{"podSecurity", podSecurityLimit, []string{"enforce", "name"}}, {"subscriptionResources", subscriptionResourcesLimit, []string{"kind", "name", "namespace", "subscription"}}} {
 			assertNonEmptyList(t, b.field, fields[b.field])
 			n := len(fields[b.field])
-			failIf(t, n > b.limit, "%s is %d bytes of JSON text, want whole entries within %d", b.field, n, b.limit)
+			testutil.FailIf(t, n > b.limit, "%s is %d bytes of JSON text, want whole entries within %d", b.field, n, b.limit)
 			var entries []map[string]json.RawMessage
 			err := json.Unmarshal(fields[b.field], &entries)
-			fatalIf(t, err != nil, "%s = %s, want a list of objects", b.field, truncate(string(fields[b.field]), 200))
+			testutil.FatalIf(t, err != nil, "%s = %s, want a list of objects", b.field, testutil.Truncate(string(fields[b.field]), 200))
 			for i, e := range entries {
-				if keys := mapKeys(e); !slices.Equal(keys, b.keys) {
+				if keys := testutil.MapKeys(e); !slices.Equal(keys, b.keys) {
 					t.Errorf("%s[%d] has keys %v, want exactly %v", b.field, i, keys, b.keys)
 					break
 				}
 			}
 		}
-		failIf(t, strings.Contains(string(r.req.Body), base64.StdEncoding.EncodeToString([]byte(clusterSecretSentinel))), "the report body carries a Secret's data")
+		testutil.FailIf(t, strings.Contains(string(r.req.Body), base64.StdEncoding.EncodeToString([]byte(clusterSecretSentinel))), "the report body carries a Secret's data")
 	}})
 	before, after := "text-before-the-nul", "text-after-the-nul"
 	for _, tc := range []struct {
@@ -1343,9 +1305,9 @@ func TestReportScript_ClusterReadsFailIndependently(t *testing.T) {
 		cases = append(cases, reportCase{name: "the dry run output is bounded and carries no NUL: " + tc.name, opts: []reportOption{withK3s(k3sLabel(tc.stdout, tc.stderr, tc.exit))}, check: func(t *testing.T, r *reportRig) {
 			assertNoNUL(t, "the dry run's output", r.req.Body)
 			status, output := dryRunResult(t, reportFields(t, r.req)["podSecurityDryRun"])
-			failIf(t, status != tc.exit, "podSecurityDryRun.exitStatus = %d, want %d", status, tc.exit)
+			testutil.FailIf(t, status != tc.exit, "podSecurityDryRun.exitStatus = %d, want %d", status, tc.exit)
 			for _, want := range tc.contains {
-				failIf(t, !strings.Contains(output, want), "podSecurityDryRun.output = %q, want it to carry %q", truncate(output, 200), want)
+				testutil.FailIf(t, !strings.Contains(output, want), "podSecurityDryRun.output = %q, want it to carry %q", testutil.Truncate(output, 200), want)
 			}
 		}})
 	}
@@ -1364,7 +1326,7 @@ func TestReportScript_Hardening(t *testing.T) {
 		{"ciliumStatus", []reportOption{withK3s(k3sExec(ciliumStatusCommand, "", "error: unable to upgrade connection: container not found (\"cilium-agent\")\n", 1))}, 1, `container not found ("cilium-agent")`},
 		{"hubbleObserve", []reportOption{withK3s(k3sExec(hubbleObserveCommand, "", "failed to connect to 'unix:///var/run/cilium/hubble.sock': connection error\n", 2))}, 2, "failed to connect to 'unix:///var/run/cilium/hubble.sock'"},
 		{"listeners", []reportOption{withTool(reportSSEnv, "ss", "", "Cannot open netlink socket: Operation not permitted\n", 1)}, 1, "Cannot open netlink socket"},
-		{"sshUnits", []reportOption{withMissingTool(reportSystemctlEnv)}, -1, ""},
+		{"sshUnits", []reportOption{withMissingTool(testutil.ReportSystemctlEnv)}, -1, ""},
 		{"metadataGuard", []reportOption{withTool(reportNftEnv, "nft", "", "Error: No such file or directory\nlist table inet mitstack_metadata_guard\n                 ^^^^^^^^^^^^^^^^^^^^^^^\n", 1)}, 1, "Error: No such file or directory"},
 		{"kubelet", []reportOption{withK3s(k3sFailing(readConfigz, 1, "Error from server (ServiceUnavailable): the server is currently unable to handle the request\n"))}, 1, "the server is currently unable to handle the request"},
 	}
@@ -1375,16 +1337,16 @@ func TestReportScript_Hardening(t *testing.T) {
 				name string
 				c    hardeningCommand
 			}{{"ss", hardeningCommands[3]}, {"systemctl", hardeningCommands[4]}, {"nft", hardeningCommands[5]}} {
-				failIf(t, len(r.tools[tool.name].runs(t)) == 0, "with its override unset the report never ran %s from PATH", tool.name)
+				testutil.FailIf(t, len(r.tools[tool.name].Runs(t)) == 0, "with its override unset the report never ran %s from PATH", tool.name)
 				assertCommandAnswered(t, tool.c, h)
 			}
 		}},
 		{name: "secretsEncryption carries stdout and stderr together", opts: []reportOption{withK3s(k3sSecretsEncrypt("Encryption Status: Enabled\n", "time=\"2026-10-04T09:50:00Z\" level=warning msg=\"the server token file is world readable\"\n", 0))}, check: func(t *testing.T, r *reportRig) {
 			_, output := commandResult(t, "hardening.secretsEncryption", hardeningOf(t, reportFields(t, r.req))["secretsEncryption"], secretsEncryptionLimit)
-			assertNamesAll(t, "hardening.secretsEncryption.output", output, "Encryption Status: Enabled", `level=warning msg="the server token file is world readable"`)
+			testutil.AssertNamesAll(t, "hardening.secretsEncryption.output", output, "Encryption Status: Enabled", `level=warning msg="the server token file is world readable"`)
 		}},
 		{name: "carries each control's evidence as the command is run", opts: []reportOption{withTool(reportSSEnv, "ss", testFile("report/listeners.txt"), "", 0),
-			withTool(reportSystemctlEnv, "systemctl", cannedSSHUnits, "", 1), withTool(reportNftEnv, "nft", testFile("report/metadata-guard.txt"), "", 0)}, check: func(t *testing.T, r *reportRig) {
+			withTool(testutil.ReportSystemctlEnv, "systemctl", cannedSSHUnits, "", 1), withTool(reportNftEnv, "nft", testFile("report/metadata-guard.txt"), "", 0)}, check: func(t *testing.T, r *reportRig) {
 			h, calls := hardeningOf(t, reportFields(t, r.req)), k3sCallsOf(t, r.k3s)
 			execRan := func(command string) bool {
 				return slices.ContainsFunc(calls, func(c k3sCall) bool {
@@ -1397,15 +1359,15 @@ func TestReportScript_Hardening(t *testing.T) {
 				assertCommandAnswered(t, c, h)
 				switch want := ran[c.field]; {
 				case c.field == "secretsEncryption":
-					failIf(t, !slices.ContainsFunc(r.k3s.argvs(t), func(a []string) bool { return slices.Equal(a, []string{"secrets-encrypt", "status"}) }), "k3s never ran secrets-encrypt status; it ran with %q", r.k3s.calls(t))
+					testutil.FailIf(t, !slices.ContainsFunc(r.k3s.argvs(t), func(a []string) bool { return slices.Equal(a, []string{"secrets-encrypt", "status"}) }), "k3s never ran secrets-encrypt status; it ran with %q", r.k3s.calls(t))
 				case c.field == "ciliumStatus" && !execRan(ciliumStatusCommand), c.field == "hubbleObserve" && !execRan(hubbleObserveCommand):
 					t.Errorf("k3s kubectl never ran %s in the cilium-agent container of ds/cilium in kube-system", c.field)
-				case want != nil && !r.tools[want[0]].ran(t, want[1:]...):
-					t.Errorf("%s ran with %q, want a run with %q", want[0], r.tools[want[0]].runs(t), want[1:])
+				case want != nil && !r.tools[want[0]].Ran(t, want[1:]...):
+					t.Errorf("%s ran with %q, want a run with %q", want[0], r.tools[want[0]].Runs(t), want[1:])
 				}
 			}
 			got := string(h["metadataProbe"])
-			failIf(t, got != "null", "hardening.metadataProbe = %s, want null while no probe has kept a result", truncate(got, 200))
+			testutil.FailIf(t, got != "null", "hardening.metadataProbe = %s, want null while no probe has kept a result", testutil.Truncate(got, 200))
 		}},
 	}
 	for _, f := range failures {
@@ -1418,7 +1380,7 @@ func TestReportScript_Hardening(t *testing.T) {
 					continue
 				}
 				status, output := commandResult(t, "hardening."+c.field, h[c.field], c.limit)
-				failIf(t, (f.exit < 0 && status <= 0) || (f.exit >= 0 && status != f.exit) || !strings.Contains(output, f.message), "hardening.%s = exitStatus %d, output %q, want the failed command's status (%d, or any non-zero for -1) and output carrying %q", c.field, status, truncate(output, 300), f.exit, f.message)
+				testutil.FailIf(t, (f.exit < 0 && status <= 0) || (f.exit >= 0 && status != f.exit) || !strings.Contains(output, f.message), "hardening.%s = exitStatus %d, output %q, want the failed command's status (%d, or any non-zero for -1) and output carrying %q", c.field, status, testutil.Truncate(output, 300), f.exit, f.message)
 			}
 			if f.field == "kubelet" {
 				assertKubectlFailure(t, "hardening.kubelet", h["kubelet"], f.exit, f.message)
@@ -1438,7 +1400,7 @@ func TestReportScript_Hardening(t *testing.T) {
 		stdout, contains := tc.stdout, tc.contains
 		cases = append(cases, reportCase{name: "outputs are bounded and carry no NUL: " + tc.name,
 			opts: []reportOption{withK3s(k3sSecretsEncrypt(stdout, "", 0), k3sExec(ciliumStatusCommand, stdout, "", 0), k3sExec(hubbleObserveCommand, stdout, "", 0)),
-				withTool(reportSSEnv, "ss", stdout, "", 0), withTool(reportSystemctlEnv, "systemctl", stdout, "", 0), withTool(reportNftEnv, "nft", stdout, "", 0)},
+				withTool(reportSSEnv, "ss", stdout, "", 0), withTool(testutil.ReportSystemctlEnv, "systemctl", stdout, "", 0), withTool(reportNftEnv, "nft", stdout, "", 0)},
 			check: func(t *testing.T, r *reportRig) {
 				assertNoNUL(t, "a hardening command's output", r.req.Body)
 				fields := reportFields(t, r.req)
@@ -1451,8 +1413,8 @@ func TestReportScript_Hardening(t *testing.T) {
 				_, units := commandResult(t, "patching.autoUpgradeUnits", patchingOf(t, fields)["autoUpgradeUnits"], autoUpgradeUnitsLimit)
 				outputs = append(outputs, namedOutput{"patching.autoUpgradeUnits", units})
 				for _, o := range outputs {
-					failIf(t, o.output == "", "%s.output is empty, want what the command printed, bounded", o.what)
-					assertNamesAll(t, o.what+".output", o.output, contains...)
+					testutil.FailIf(t, o.output == "", "%s.output is empty, want what the command printed, bounded", o.what)
+					testutil.AssertNamesAll(t, o.what+".output", o.output, contains...)
 				}
 			}})
 	}
@@ -1460,7 +1422,7 @@ func TestReportScript_Hardening(t *testing.T) {
 	cases = append(cases, reportCase{name: "kubelet carries eviction and reservations from the live config of this node", check: func(t *testing.T, r *reportRig) {
 		sameJSON(t, "hardening.kubelet", hardeningOf(t, reportFields(t, r.req))["kubelet"], testFile("want/kubelet.json"))
 		want := "/api/v1/nodes/" + hostNodeName(t) + "/proxy/configz"
-		failIf(t, !slices.ContainsFunc(k3sCallsOf(t, r.k3s), func(c k3sCall) bool { return c.verb == "get" && c.flags["--raw"] == want }), "k3s kubectl never read get --raw %s; it ran with %q", want, r.k3s.calls(t))
+		testutil.FailIf(t, !slices.ContainsFunc(k3sCallsOf(t, r.k3s), func(c k3sCall) bool { return c.verb == "get" && c.flags["--raw"] == want }), "k3s kubectl never read get --raw %s; it ran with %q", want, r.k3s.calls(t))
 	}})
 	for _, tc := range []struct {
 		name    string
@@ -1488,10 +1450,10 @@ type keptProbe struct {
 
 func decodeKeptProbe(t *testing.T, what string, raw []byte) keptProbe {
 	t.Helper()
-	objectOf(t, what, raw, "checkedAt", "containerStartedAt", "log", "podCreatedAt")
+	testutil.ObjectOf(t, what, raw, "checkedAt", "containerStartedAt", "log", "podCreatedAt")
 	var p keptProbe
 	err := json.Unmarshal(raw, &p)
-	failIf(t, err != nil, "%s = %s, want four strings (%v)", what, truncate(string(raw), 300), err)
+	testutil.FailIf(t, err != nil, "%s = %s, want four strings (%v)", what, testutil.Truncate(string(raw), 300), err)
 	return p
 }
 
@@ -1505,7 +1467,7 @@ func TestReportScript_MetadataProbe(t *testing.T) {
 		{name: "carries the probe Job's pod times and log once its pod succeeded", opts: []reportOption{withK3s(k3sMetadataProbe("Succeeded", testFile("report/probe.log")))}, check: func(t *testing.T, r *reportRig) {
 			got := decodeKeptProbe(t, "hardening.metadataProbe", hardeningOf(t, r.fields())["metadataProbe"])
 			want := keptProbe{CheckedAt: cannedProbeFinishedAt, PodCreatedAt: cannedProbeCreatedAt, ContainerStartedAt: cannedProbeStartedAt, Log: testFile("report/probe.log")}
-			failIf(t, got != want, "hardening.metadataProbe = %+v\nwant %+v, the pod's finish, creation and start times and its log", got, want)
+			testutil.FailIf(t, got != want, "hardening.metadataProbe = %+v\nwant %+v, the pod's finish, creation and start times and its log", got, want)
 		}},
 		{name: "a bounded log of text that grows as JSON is carried in whole", opts: []reportOption{withK3s(k3sMetadataProbe("Succeeded", largestToolOutput))}, check: func(t *testing.T, r *reportRig) { assertCarriedProbeLog(t, r, nil) }},
 		{name: "a NUL in the log never reaches the report", opts: []reportOption{withK3s(k3sMetadataProbe("Succeeded", "t=0s 2026-10-04T09:50:04Z: http=000 bytes=0\ntext-before-the-nul\x00text-after-the-nul\n"))}, check: func(t *testing.T, r *reportRig) {
@@ -1523,7 +1485,7 @@ func TestReportScript_MetadataProbe(t *testing.T) {
 	} {
 		cases = append(cases, reportCase{name: "carries null when " + tc.name, opts: []reportOption{withK3s(tc.opt)}, check: func(t *testing.T, r *reportRig) {
 			got := string(hardeningOf(t, r.fields())["metadataProbe"])
-			failIf(t, got != "null", "hardening.metadataProbe = %s, want null when %s", truncate(got, 200), tc.name)
+			testutil.FailIf(t, got != "null", "hardening.metadataProbe = %s, want null when %s", testutil.Truncate(got, 200), tc.name)
 		}})
 	}
 	runReportCases(t, cases)
@@ -1534,19 +1496,19 @@ func assertCarriedProbeLog(t *testing.T, r *reportRig, contains []string) {
 	assertNoNUL(t, "the probe's log", r.req.Body)
 	got := decodeKeptProbe(t, "hardening.metadataProbe", hardeningOf(t, reportFields(t, r.req))["metadataProbe"])
 	n := jsonTextLen(got.Log)
-	failIf(t, got.Log == "" || n > metadataProbeLogLimit, "hardening.metadataProbe.log is %d bytes of JSON text, want some and at most %d", n, metadataProbeLogLimit)
-	failIf(t, strings.ContainsRune(got.Log, 0), "hardening.metadataProbe.log carries a NUL")
-	assertNamesAll(t, "hardening.metadataProbe.log", got.Log, contains...)
+	testutil.FailIf(t, got.Log == "" || n > metadataProbeLogLimit, "hardening.metadataProbe.log is %d bytes of JSON text, want some and at most %d", n, metadataProbeLogLimit)
+	testutil.FailIf(t, strings.ContainsRune(got.Log, 0), "hardening.metadataProbe.log carries a NUL")
+	testutil.AssertNamesAll(t, "hardening.metadataProbe.log", got.Log, contains...)
 }
 
 func hardeningOf(t *testing.T, fields map[string]json.RawMessage) map[string]json.RawMessage {
 	t.Helper()
-	return objectOf(t, "hardening", fields["hardening"], hardeningKeys...)
+	return testutil.ObjectOf(t, "hardening", fields["hardening"], hardeningKeys...)
 }
 
 func patchingOf(t *testing.T, fields map[string]json.RawMessage) map[string]json.RawMessage {
 	t.Helper()
-	return objectOf(t, "patching", fields["patching"], patchingKeys...)
+	return testutil.ObjectOf(t, "patching", fields["patching"], patchingKeys...)
 }
 
 func patchingFields(t *testing.T, r *reportRig) map[string]json.RawMessage {
@@ -1567,24 +1529,24 @@ type rebootState struct {
 
 func reportedReboot(t *testing.T, raw []byte) rebootState {
 	t.Helper()
-	objectOf(t, "patching.rebootRequired", raw, "exists", "modifiedAt", "packages")
+	testutil.ObjectOf(t, "patching.rebootRequired", raw, "exists", "modifiedAt", "packages")
 	var s rebootState
 	err := json.Unmarshal(raw, &s)
-	failIf(t, err != nil || strings.ContainsRune(s.Packages, 0), "patching.rebootRequired = %s, want exists a bool, modifiedAt a time or null and packages a NUL-free string (%v)", truncate(string(raw), 200), err)
+	testutil.FailIf(t, err != nil || strings.ContainsRune(s.Packages, 0), "patching.rebootRequired = %s, want exists a bool, modifiedAt a time or null and packages a NUL-free string (%v)", testutil.Truncate(string(raw), 200), err)
 	return s
 }
 
 func assertPatchingWithinBounds(t *testing.T, fields map[string]json.RawMessage) {
 	t.Helper()
 	patching := patchingOf(t, fields)
-	for _, member := range mapKeys(patchingMemberBounds) {
+	for _, member := range testutil.MapKeys(patchingMemberBounds) {
 		n, bound := len(patching[member]), patchingMemberBounds[member]
-		failIf(t, n > bound, "patching.%s is %d bytes of JSON text in the body, want at most %d: %s", member, n, bound, truncate(string(patching[member]), 200))
+		testutil.FailIf(t, n > bound, "patching.%s is %d bytes of JSON text in the body, want at most %d: %s", member, n, bound, testutil.Truncate(string(patching[member]), 200))
 	}
 	for _, p := range patchingReads {
 		raw := p.in(t, fields)
 		n, limit := len(raw), patchingPartBounds[p.member+"."+p.part]
-		failIf(t, n > limit, "patching.%s.%s is %d bytes of JSON text in the body, want at most %d", p.member, p.part, n, limit)
+		testutil.FailIf(t, n > limit, "patching.%s.%s is %d bytes of JSON text in the body, want at most %d", p.member, p.part, n, limit)
 	}
 }
 
@@ -1597,13 +1559,13 @@ var patchingReads = []patchingRead{
 func (p patchingRead) in(t *testing.T, fields map[string]json.RawMessage) []byte {
 	t.Helper()
 	parts := map[string][]string{"kured": {"current", "previous"}, "upgradePlans": {"jobs", "plans"}}
-	return objectOf(t, "patching."+p.member, patchingOf(t, fields)[p.member], parts[p.member]...)[p.part]
+	return testutil.ObjectOf(t, "patching."+p.member, patchingOf(t, fields)[p.member], parts[p.member]...)[p.part]
 }
 
 func assertPatchingPartsAnswered(t *testing.T, fields map[string]json.RawMessage, skip patchingRead) {
 	t.Helper()
 	want := map[string]string{
-		"kured.current": mustJSON(testFile("report/kured.log")), "kured.previous": mustJSON(testFile("report/kured-previous.log")),
+		"kured.current": testutil.MustJSON(testFile("report/kured.log")), "kured.previous": testutil.MustJSON(testFile("report/kured-previous.log")),
 		"upgradePlans.plans": testFile("want/upgrade-plans.json"), "upgradePlans.jobs": testFile("want/upgrade-jobs.json"),
 	}
 	for _, p := range patchingReads {
@@ -1625,43 +1587,43 @@ func TestReportScript_Patching(t *testing.T) {
 		{name: "check is a new one once the kept check is an hour old", opts: []reportOption{withHourOldCheck()}, check: func(t *testing.T, r *reportRig) {
 			got, _ := decodeAny(t, "patching.check", check(t, r)).(map[string]any)
 			kept, _ := decodeAny(t, "the kept check", []byte(testFile("report/patch-check.json"))).(map[string]any)
-			failIf(t, got == nil || got["verdict"] == nil || got["checkedAt"] == kept["checkedAt"], "patching.check = %s, want the check the collector ran in place of the hour-old one", truncate(string(check(t, r)), 200))
+			testutil.FailIf(t, got == nil || got["verdict"] == nil || got["checkedAt"] == kept["checkedAt"], "patching.check = %s, want the check the collector ran in place of the hour-old one", testutil.Truncate(string(check(t, r)), 200))
 		}},
-		{name: "autoUpgradeUnits carries whether the units are enabled", opts: []reportOption{withTool(reportSystemctlEnv, "systemctl", cannedSSHUnits, "", cannedSSHUnitsExit, toolAnswer{args: autoUpgradeUnitsArgs, stdout: "enabled\nenabled\nenabled\n"})}, check: func(t *testing.T, r *reportRig) {
+		{name: "autoUpgradeUnits carries whether the units are enabled", opts: []reportOption{withTool(testutil.ReportSystemctlEnv, "systemctl", cannedSSHUnits, "", cannedSSHUnitsExit, testutil.ToolAnswer{Args: autoUpgradeUnitsArgs, Stdout: "enabled\nenabled\nenabled\n"})}, check: func(t *testing.T, r *reportRig) {
 			assertAutoUpgradeUnits(t, r, "enabled\nenabled\nenabled\n", 0)
 		}},
-		{name: "autoUpgradeUnits records a disabled timer as evidence while the report goes", opts: []reportOption{withTool(reportSystemctlEnv, "systemctl", cannedSSHUnits, "", cannedSSHUnitsExit, toolAnswer{args: autoUpgradeUnitsArgs, stdout: "enabled\ndisabled\nenabled\n", exit: 1})}, check: func(t *testing.T, r *reportRig) {
+		{name: "autoUpgradeUnits records a disabled timer as evidence while the report goes", opts: []reportOption{withTool(testutil.ReportSystemctlEnv, "systemctl", cannedSSHUnits, "", cannedSSHUnitsExit, testutil.ToolAnswer{Args: autoUpgradeUnitsArgs, Stdout: "enabled\ndisabled\nenabled\n", Exit: 1})}, check: func(t *testing.T, r *reportRig) {
 			assertAutoUpgradeUnits(t, r, "enabled\ndisabled\nenabled\n", 1)
 		}},
 		{name: "unattendedUpgradesLog carries all of a short log", opts: []reportOption{withSource(reportUnattendedUpgradesLogEnv, "unattended-upgrades.log", testFile("report/unattended-upgrades.log"))}, check: func(t *testing.T, r *reportRig) {
 			got := patchingString(t, r, "unattendedUpgradesLog")
-			failIf(t, got != testFile("report/unattended-upgrades.log"), "patching.unattendedUpgradesLog = %q, want the whole log", got)
+			testutil.FailIf(t, got != testFile("report/unattended-upgrades.log"), "patching.unattendedUpgradesLog = %q, want the whole log", got)
 		}},
 		{name: "unattendedUpgradesLog carries nothing when there is no log yet", opts: []reportOption{withEnvVar(reportUnattendedUpgradesLogEnv, "/nonexistent/unattended-upgrades.log")}, check: func(t *testing.T, r *reportRig) {
 			got := patchingString(t, r, "unattendedUpgradesLog")
-			failIf(t, got != "", "patching.unattendedUpgradesLog = %q, want nothing", got)
+			testutil.FailIf(t, got != "", "patching.unattendedUpgradesLog = %q, want nothing", got)
 		}},
 		{name: "unattendedUpgradesLog carries the newest whole lines of a long log within its bound", opts: []reportOption{withSource(reportUnattendedUpgradesLogEnv, "unattended-upgrades.log", strings.Join(long, "\n")+"\n")}, check: func(t *testing.T, r *reportRig) {
 			got := patchingString(t, r, "unattendedUpgradesLog")
 			newest := long[len(long)-1]
 			n := jsonTextLen(got)
-			failIf(t, n > unattendedUpgradesLogLimit || n <= unattendedUpgradesLogLimit-jsonTextLen(newest+"\n"), "patching.unattendedUpgradesLog is %d bytes of JSON text, want the newest lines that fit in %d", n, unattendedUpgradesLogLimit)
+			testutil.FailIf(t, n > unattendedUpgradesLogLimit || n <= unattendedUpgradesLogLimit-jsonTextLen(newest+"\n"), "patching.unattendedUpgradesLog is %d bytes of JSON text, want the newest lines that fit in %d", n, unattendedUpgradesLogLimit)
 			first := strings.SplitN(got, "\n", 2)[0]
-			failIf(t, lastLine(got) != newest || !slices.Contains(long, first), "patching.unattendedUpgradesLog starts %q and ends %q, want whole lines ending with the newest %q", truncate(first, 80), truncate(lastLine(got), 80), truncate(newest, 80))
+			testutil.FailIf(t, lastLine(got) != newest || !slices.Contains(long, first), "patching.unattendedUpgradesLog starts %q and ends %q, want whole lines ending with the newest %q", testutil.Truncate(first, 80), testutil.Truncate(lastLine(got), 80), testutil.Truncate(newest, 80))
 		}},
 		{name: "rebootRequired carries a pending reboot's mtime and packages", opts: []reportOption{withRebootSentinel(changed, pkgs)}, check: func(t *testing.T, r *reportRig) {
 			want := "2026-10-07T01:30:21Z"
 			got := reportedReboot(t, patchingFields(t, r)["rebootRequired"])
-			failIf(t, !got.Exists || got.ModifiedAt == nil || *got.ModifiedAt != want || got.Packages != pkgs, "patching.rebootRequired = %+v, want exists, modifiedAt %s and packages %q", got, want, pkgs)
+			testutil.FailIf(t, !got.Exists || got.ModifiedAt == nil || *got.ModifiedAt != want || got.Packages != pkgs, "patching.rebootRequired = %+v, want exists, modifiedAt %s and packages %q", got, want, pkgs)
 		}},
 		{name: "rebootRequired says no reboot is pending", opts: []reportOption{withEnvVar(reportRebootRequiredEnv, "/nonexistent/reboot-required")}, check: func(t *testing.T, r *reportRig) {
 			got := reportedReboot(t, patchingFields(t, r)["rebootRequired"])
-			failIf(t, got.Exists || got.ModifiedAt != nil || got.Packages != "", "patching.rebootRequired = %+v, want not exists, null modifiedAt and no packages", got)
+			testutil.FailIf(t, got.Exists || got.ModifiedAt != nil || got.Packages != "", "patching.rebootRequired = %+v, want not exists, null modifiedAt and no packages", got)
 		}},
 		{name: "rebootRequired keeps the start of a package list past its limit", opts: []reportOption{withRebootSentinel(changed, strings.Repeat("linux-image-6.8.0-85-generic\n", 1000))}, check: func(t *testing.T, r *reportRig) {
 			got := reportedReboot(t, patchingFields(t, r)["rebootRequired"])
 			n := jsonTextLen(got.Packages)
-			failIf(t, !got.Exists || n > rebootPackagesLimit || n < rebootPackagesLimit/2 || !strings.HasPrefix(got.Packages, "linux-image-6.8.0-85-generic\n"), "patching.rebootRequired = exists %v with %d bytes of JSON text of packages starting %q, want the start of the list within %d", got.Exists, n, truncate(got.Packages, 80), rebootPackagesLimit)
+			testutil.FailIf(t, !got.Exists || n > rebootPackagesLimit || n < rebootPackagesLimit/2 || !strings.HasPrefix(got.Packages, "linux-image-6.8.0-85-generic\n"), "patching.rebootRequired = exists %v with %d bytes of JSON text of packages starting %q, want the start of the list within %d", got.Exists, n, testutil.Truncate(got.Packages, 80), rebootPackagesLimit)
 		}},
 		{name: "kured carries the log of ds/kured before and after its reboot", check: func(t *testing.T, r *reportRig) {
 			assertPatchingPartsAnswered(t, reportFields(t, r.req), patchingRead{})
@@ -1673,7 +1635,7 @@ func TestReportScript_Patching(t *testing.T) {
 					previous, current = previous || p || short || c.flags["--previous"] == "true", current || !(p || short)
 				}
 			}
-			failIf(t, !current || !previous, "k3s kubectl read kured's current log %v and its previous log %v, want both from ds/kured in kube-system", current, previous)
+			testutil.FailIf(t, !current || !previous, "k3s kubectl read kured's current log %v and its previous log %v, want both from ds/kured in kube-system", current, previous)
 		}},
 		{name: "upgradePlans carries each Plan and Job in system-upgrade", check: func(t *testing.T, r *reportRig) {
 			assertPatchingPartsAnswered(t, reportFields(t, r.req), patchingRead{})
@@ -1690,14 +1652,14 @@ func TestReportScript_Patching(t *testing.T) {
 	for _, tc := range []struct{ name, content string }{
 		{"not JSON", "verdict: pass\n"},
 		{"a JSON list", `[{"verdict": "pass"}]`},
-		{"past the limit", mustJSON(map[string]any{"verdict": "pass", "pad": strings.Repeat("p", patchCheckFileLimit)})},
+		{"past the limit", testutil.MustJSON(map[string]any{"verdict": "pass", "pad": strings.Repeat("p", patchCheckFileLimit)})},
 		{"an empty file", ""},
 		{"half a JSON object", `{"checkedAt": "2026-10-08T03:10:00Z", "verdict": "pa`},
 	} {
 		cases = append(cases, reportCase{name: "check says why it cannot carry a patch-check.json that is " + tc.name, opts: []reportOption{withStateDir(tc.content)}, check: func(t *testing.T, r *reportRig) {
-			m := objectOf(t, "patching.check", check(t, r), "unreadable")
+			m := testutil.ObjectOf(t, "patching.check", check(t, r), "unreadable")
 			why := stringOf(t, "patching.check.unreadable", m["unreadable"])
-			failIf(t, strings.TrimSpace(why) == "" || len(why) > 1024, "patching.check.unreadable = %q, want a short reason", why)
+			testutil.FailIf(t, strings.TrimSpace(why) == "" || len(why) > 1024, "patching.check.unreadable = %q, want a short reason", why)
 		}})
 	}
 	for _, p := range patchingReads {
@@ -1728,12 +1690,12 @@ func TestReportScript_Patching(t *testing.T) {
 	} {
 		cases = append(cases, reportCase{name: "kured logs keep their end and carry no NUL: " + tc.name, opts: []reportOption{withK3s(k3sLogs(readKuredLog, tc.log), k3sLogs(readKuredPreviousLog, tc.log))}, check: func(t *testing.T, r *reportRig) {
 			assertNoNUL(t, "kured's log", r.req.Body)
-			kured := objectOf(t, "patching.kured", patchingFields(t, r)["kured"], "current", "previous")
+			kured := testutil.ObjectOf(t, "patching.kured", patchingFields(t, r)["kured"], "current", "previous")
 			for _, part := range []string{"current", "previous"} {
 				got := stringOf(t, "patching.kured."+part, kured[part])
 				n := jsonTextLen(got)
-				failIf(t, got == "" || n > kuredLogLimit, "patching.kured.%s is %d bytes of JSON text, want some and at most %d", part, n, kuredLogLimit)
-				assertNamesAll(t, "patching.kured."+part, got, tc.contains...)
+				testutil.FailIf(t, got == "" || n > kuredLogLimit, "patching.kured.%s is %d bytes of JSON text, want some and at most %d", part, n, kuredLogLimit)
+				testutil.AssertNamesAll(t, "patching.kured."+part, got, tc.contains...)
 			}
 		}})
 	}
@@ -1741,15 +1703,15 @@ func TestReportScript_Patching(t *testing.T) {
 		name string
 		opts []reportOption
 	}{
-		{"the largest failing answers", []reportOption{withFailingK3s(strings.Repeat("\x01", 1<<20)), withTool(reportSystemctlEnv, "systemctl", largestToolOutput, largestToolOutput, 1),
+		{"the largest failing answers", []reportOption{withFailingK3s(strings.Repeat("\x01", 1<<20)), withTool(testutil.ReportSystemctlEnv, "systemctl", largestToolOutput, largestToolOutput, 1),
 			withStateDir(strings.Repeat("\x01é", 1<<18)), withSource(reportUnattendedUpgradesLogEnv, "unattended-upgrades.log", strings.Repeat(strings.Repeat("\x01", 200)+"\n", 2000)),
 			withRebootSentinel(time.Now(), largestToolOutput)}},
-		{"the largest succeeding answers", []reportOption{withK3s(extremePatchingAnswers()...), withTool(reportSystemctlEnv, "systemctl", largestToolOutput, "", 0),
+		{"the largest succeeding answers", []reportOption{withK3s(extremePatchingAnswers()...), withTool(testutil.ReportSystemctlEnv, "systemctl", largestToolOutput, "", 0),
 			withStateDir(largestNonASCIICheck(t)), withSource(reportUnattendedUpgradesLogEnv, "unattended-upgrades.log", strings.Repeat(strings.Repeat("\x01", 200)+"\n", 2000)),
 			withRebootSentinel(time.Now(), largestToolOutput)}},
 	} {
 		cases = append(cases, reportCase{name: "each patching member stays within its bound on every branch: " + tc.name, opts: tc.opts, check: func(t *testing.T, r *reportRig) {
-			fatalIf(t, !json.Valid(r.req.Body), "the report body is not valid JSON")
+			testutil.FatalIf(t, !json.Valid(r.req.Body), "the report body is not valid JSON")
 			assertPatchingWithinBounds(t, reportFields(t, r.req))
 		}})
 	}
@@ -1759,47 +1721,47 @@ func TestReportScript_Patching(t *testing.T) {
 func assertAutoUpgradeUnits(t *testing.T, r *reportRig, output string, exit int) {
 	t.Helper()
 	status, got := commandResult(t, "patching.autoUpgradeUnits", patchingFields(t, r)["autoUpgradeUnits"], autoUpgradeUnitsLimit)
-	failIf(t, status != exit || got != output, "patching.autoUpgradeUnits = exitStatus %d, output %q, want %d and %q", status, got, exit, output)
+	testutil.FailIf(t, status != exit || got != output, "patching.autoUpgradeUnits = exitStatus %d, output %q, want %d and %q", status, got, exit, output)
 	want := strings.Fields(autoUpgradeUnitsArgs)
-	failIf(t, !r.tools["systemctl"].ran(t, want...), "systemctl ran with %q, want a run with %q", r.tools["systemctl"].runs(t), want)
+	testutil.FailIf(t, !r.tools["systemctl"].Ran(t, want...), "systemctl ran with %q, want a run with %q", r.tools["systemctl"].Runs(t), want)
 }
 
 func largestBody(t *testing.T, succeeding bool) []reportOption {
 	t.Helper()
 	journal, cloudInit := largestLogs()
 	uu := largestUnattendedUpgradesLog()
-	opts := []reportOption{withJournal(journal), withSource(reportCloudInitLogEnv, "cloud-init-output.log", strings.Join(cloudInit, "\n")+"\n"),
+	opts := []reportOption{withJournal(journal), withSource(testutil.ReportCloudInitLogEnv, "cloud-init-output.log", strings.Join(cloudInit, "\n")+"\n"),
 		withSource(reportUnattendedUpgradesLogEnv, "unattended-upgrades.log", strings.Join(uu, "\n")+"\n"), withLargestStateDir(t),
 		withRebootSentinel(time.Now(), largestToolOutput)}
 	if succeeding {
 		return append(opts, withK3s(append(append(extremeClusterAnswers(), extremePatchingAnswers()...), k3sSecretsEncrypt(largestToolOutput, "", 0),
 			k3sExec(ciliumStatusCommand, largestToolOutput, "", 0), k3sExec(hubbleObserveCommand, largestToolOutput, "", 0), k3sMetadataProbe("Succeeded", largestToolOutput))...),
-			withTool(reportSSEnv, "ss", largestToolOutput, "", 0), withTool(reportSystemctlEnv, "systemctl", largestToolOutput, "", 0), withTool(reportNftEnv, "nft", largestToolOutput, "", 0))
+			withTool(reportSSEnv, "ss", largestToolOutput, "", 0), withTool(testutil.ReportSystemctlEnv, "systemctl", largestToolOutput, "", 0), withTool(reportNftEnv, "nft", largestToolOutput, "", 0))
 	}
 	return append(opts, withFailingK3s(strings.Repeat("E", 1<<20)), withTool(reportSSEnv, "ss", "", largestToolOutput, 1),
-		withTool(reportSystemctlEnv, "systemctl", largestToolOutput, "", 1), withTool(reportNftEnv, "nft", "", largestToolOutput, 1))
+		withTool(testutil.ReportSystemctlEnv, "systemctl", largestToolOutput, "", 1), withTool(reportNftEnv, "nft", "", largestToolOutput, 1))
 }
 
 func assertApplicationsKeepClippedConditions(t *testing.T, raw []byte) {
 	t.Helper()
-	failIf(t, len(raw) > applicationsLimit, "applications is %d bytes of JSON text, want whole entries within %d", len(raw), applicationsLimit)
+	testutil.FailIf(t, len(raw) > applicationsLimit, "applications is %d bytes of JSON text, want whole entries within %d", len(raw), applicationsLimit)
 	var entries []struct {
 		Name       string              `json:"name"`
 		Conditions []map[string]string `json:"conditions"`
 	}
 	err := json.Unmarshal(raw, &entries)
-	fatalIf(t, err != nil || len(entries) == 0, "applications = %s (err %v), want a list of entries", truncate(string(raw), 200), err)
+	testutil.FatalIf(t, err != nil || len(entries) == 0, "applications = %s (err %v), want a list of entries", testutil.Truncate(string(raw), 200), err)
 	for _, e := range entries {
 		var i int
 		_, err := fmt.Sscanf(e.Name, "application-%05d", &i)
-		fatalIf(t, err != nil, "applications entry %q has no generated index: %v", truncate(e.Name, 40), err)
+		testutil.FatalIf(t, err != nil, "applications entry %q has no generated index: %v", testutil.Truncate(e.Name, 40), err)
 		long := fmt.Sprintf("comparison-%05d-", i) + strings.Repeat("m", 700)
 		want := []map[string]string{
 			{"type": "SharedResourceWarning", "message": fmt.Sprintf("short-%05d", i)},
 			{"type": "ComparisonError", "message": long[:applicationConditionMessageLimit]},
 		}
 		if !reflect.DeepEqual(e.Conditions, want) {
-			t.Errorf("applications entry %d conditions = %s, want the short message whole and the long one clipped to its first %d bytes", i, truncate(fmt.Sprint(e.Conditions), 300), applicationConditionMessageLimit)
+			t.Errorf("applications entry %d conditions = %s, want the short message whole and the long one clipped to its first %d bytes", i, testutil.Truncate(fmt.Sprint(e.Conditions), 300), applicationConditionMessageLimit)
 			return
 		}
 	}
@@ -1812,55 +1774,55 @@ func TestReportScript_BodyStaysUnder256KiB(t *testing.T) {
 		fields := reportFields(t, r.req)
 		_, gotJournal := postedReport(t, r.req)
 		got := lastLine(gotJournal)
-		failIf(t, got != journal[len(journal)-1], "the journal ends %q, want the newest line kept", truncate(got, 80))
+		testutil.FailIf(t, got != journal[len(journal)-1], "the journal ends %q, want the newest line kept", testutil.Truncate(got, 80))
 		if journalBudget {
 			perLine := jsonTextLen(journal[0] + "\n")
 			got := jsonTextLen(gotJournal)
-			failIf(t, got > reportJournalBudget || got <= reportJournalBudget-perLine, "the journal is %d bytes of JSON text, want the newest lines that fit in %d, so more than %d", got, reportJournalBudget, reportJournalBudget-perLine)
+			testutil.FailIf(t, got > reportJournalBudget || got <= reportJournalBudget-perLine, "the journal is %d bytes of JSON text, want the newest lines that fit in %d, so more than %d", got, reportJournalBudget, reportJournalBudget-perLine)
 		}
 		gotCloudInit := stringOf(t, "cloudInit", fields["cloudInit"])
 		got2 := lastLine(gotCloudInit)
-		failIf(t, got2 != cloudInit[len(cloudInit)-1], "cloudInit ends %q, want the newest line kept", truncate(got2, 80))
+		testutil.FailIf(t, got2 != cloudInit[len(cloudInit)-1], "cloudInit ends %q, want the newest line kept", testutil.Truncate(got2, 80))
 		if journalBudget {
 			return
 		}
 		perLine := jsonTextLen(cloudInit[0] + "\n")
 		got3 := jsonTextLen(gotCloudInit)
-		failIf(t, got3 > reportCloudInitBudget || got3 <= reportCloudInitBudget-perLine, "cloudInit is %d bytes of JSON text, want the newest lines that fit in %d, so more than %d", got3, reportCloudInitBudget, reportCloudInitBudget-perLine)
+		testutil.FailIf(t, got3 > reportCloudInitBudget || got3 <= reportCloudInitBudget-perLine, "cloudInit is %d bytes of JSON text, want the newest lines that fit in %d, so more than %d", got3, reportCloudInitBudget, reportCloudInitBudget-perLine)
 	}
 	cases := []reportCase{
-		{name: "the largest logs leave every cluster field intact", opts: []reportOption{withJournal(journal), withSource(reportCloudInitLogEnv, "cloud-init-output.log", strings.Join(cloudInit, "\n")+"\n")}, check: func(t *testing.T, r *reportRig) {
+		{name: "the largest logs leave every cluster field intact", opts: []reportOption{withJournal(journal), withSource(testutil.ReportCloudInitLogEnv, "cloud-init-output.log", strings.Join(cloudInit, "\n")+"\n")}, check: func(t *testing.T, r *reportRig) {
 			n := len(r.req.Body)
-			failIf(t, n >= reportBodyLimit, "the report body is %d bytes, want under %d", n, reportBodyLimit)
+			testutil.FailIf(t, n >= reportBodyLimit, "the report body is %d bytes, want under %d", n, reportBodyLimit)
 			assertLogs(t, r, true)
 			assertClusterAnsweredBut(t, reportFields(t, r.req), clusterRead{})
 		}},
 		{name: "every field at its largest and failing", opts: largestBody(t, false), check: func(t *testing.T, r *reportRig) {
 			n := len(r.req.Body)
-			failIf(t, n > reportBodyMax, "the report body is %d bytes, want at most %d", n, reportBodyMax)
+			testutil.FailIf(t, n > reportBodyMax, "the report body is %d bytes, want at most %d", n, reportBodyMax)
 			assertLogs(t, r, false)
 			fields := reportFields(t, r.req)
 			for _, rd := range clusterReads {
 				assertKubectlFailure(t, rd.name(), rd.in(t, fields), 1, "EEEE")
 			}
 			status, output := dryRunResult(t, fields["podSecurityDryRun"])
-			failIf(t, status != 1 || !strings.Contains(output, "EEEE"), "podSecurityDryRun carries exitStatus %d and %d bytes of output, want 1 and the failed dry run's stderr", status, len(output))
+			testutil.FailIf(t, status != 1 || !strings.Contains(output, "EEEE"), "podSecurityDryRun carries exitStatus %d and %d bytes of output, want 1 and the failed dry run's stderr", status, len(output))
 			h := hardeningOf(t, fields)
 			for _, c := range hardeningCommands {
 				status, output := commandResult(t, "hardening."+c.field, h[c.field], c.limit)
-				failIf(t, status != 1 || output == "", "hardening.%s carries exitStatus %d and %d bytes of output, want 1 and the failed command's output", c.field, status, len(output))
+				testutil.FailIf(t, status != 1 || output == "", "hardening.%s carries exitStatus %d and %d bytes of output, want 1 and the failed command's output", c.field, status, len(output))
 			}
 			assertKubectlFailure(t, "hardening.kubelet", h["kubelet"], 1, "EEEE")
 			sameJSON(t, "hardening.metadataProbe", h["metadataProbe"], "null")
 			patching := patchingOf(t, fields)
 			assertPatchingWithinBounds(t, fields)
 			status2, output2 := commandResult(t, "patching.autoUpgradeUnits", patching["autoUpgradeUnits"], autoUpgradeUnitsLimit)
-			failIf(t, status2 != 1 || output2 == "", "patching.autoUpgradeUnits carries exitStatus %d and %d bytes of output2, want 1 and the failed command's output2", status2, len(output2))
+			testutil.FailIf(t, status2 != 1 || output2 == "", "patching.autoUpgradeUnits carries exitStatus %d and %d bytes of output2, want 1 and the failed command's output2", status2, len(output2))
 			log, uu := patchingString(t, r, "unattendedUpgradesLog"), largestUnattendedUpgradesLog()
 			n2 := jsonTextLen(log)
-			failIf(t, log == "" || n2 > unattendedUpgradesLogLimit || lastLine(log) != uu[len(uu)-1], "patching.unattendedUpgradesLog is %d bytes of JSON text ending %q, want the newest line within %d", n2, truncate(lastLine(log), 80), unattendedUpgradesLogLimit)
+			testutil.FailIf(t, log == "" || n2 > unattendedUpgradesLogLimit || lastLine(log) != uu[len(uu)-1], "patching.unattendedUpgradesLog is %d bytes of JSON text ending %q, want the newest line within %d", n2, testutil.Truncate(lastLine(log), 80), unattendedUpgradesLogLimit)
 			reboot := reportedReboot(t, patching["rebootRequired"])
-			failIf(t, !reboot.Exists || reboot.Packages == "" || jsonTextLen(reboot.Packages) > rebootPackagesLimit, "patching.rebootRequired = exists %v with %d bytes of JSON text of packages, want a pending reboot and at most %d", reboot.Exists, jsonTextLen(reboot.Packages), rebootPackagesLimit)
+			testutil.FailIf(t, !reboot.Exists || reboot.Packages == "" || jsonTextLen(reboot.Packages) > rebootPackagesLimit, "patching.rebootRequired = exists %v with %d bytes of JSON text of packages, want a pending reboot and at most %d", reboot.Exists, jsonTextLen(reboot.Packages), rebootPackagesLimit)
 			for _, p := range patchingReads {
 				assertKubectlFailure(t, "patching."+p.member+"."+p.part, p.in(t, fields), 1, "EEEE")
 			}
@@ -1869,16 +1831,16 @@ func TestReportScript_BodyStaysUnder256KiB(t *testing.T) {
 		}},
 		{name: "every read succeeding at its largest keeps entries and bounds", opts: largestBody(t, true), check: func(t *testing.T, r *reportRig) {
 			n := len(r.req.Body)
-			fatalIf(t, n > reportBodyMax || !json.Valid(r.req.Body), "the report body is %d bytes (valid JSON %v), want valid JSON of at most %d", n, json.Valid(r.req.Body), reportBodyMax)
+			testutil.FatalIf(t, n > reportBodyMax || !json.Valid(r.req.Body), "the report body is %d bytes (valid JSON %v), want valid JSON of at most %d", n, json.Valid(r.req.Body), reportBodyMax)
 			fields := reportFields(t, r.req)
-			kubernetes := objectOf(t, "kubernetes", fields["kubernetes"], "argocdPods", "nodes")
+			kubernetes := testutil.ObjectOf(t, "kubernetes", fields["kubernetes"], "argocdPods", "nodes")
 			assertNonEmptyList(t, "kubernetes.nodes", kubernetes["nodes"])
 			assertNonEmptyList(t, "kubernetes.argocdPods", kubernetes["argocdPods"])
 			for _, field := range []string{"ciliumPods", "helmInstallJobs", "helmCharts", "applications", "repositorySecrets", "admission", "defaultDenyPolicies"} {
 				assertNonEmptyList(t, field, fields[field])
 			}
 			assertApplicationsKeepClippedConditions(t, fields["applications"])
-			podMemory := objectOf(t, "podMemory", fields["podMemory"], "argocd", "cilium")
+			podMemory := testutil.ObjectOf(t, "podMemory", fields["podMemory"], "argocd", "cilium")
 			assertNonEmptyList(t, "podMemory.argocd", podMemory["argocd"])
 			assertNonEmptyList(t, "podMemory.cilium", podMemory["cilium"])
 			for _, b := range []struct {
@@ -1887,40 +1849,40 @@ func TestReportScript_BodyStaysUnder256KiB(t *testing.T) {
 			}{{"podSecurity", podSecurityLimit}, {"subscriptionResources", subscriptionResourcesLimit}, {"cloudNativePG", cloudNativePGLimit}} {
 				assertNonEmptyList(t, b.field, fields[b.field])
 				n := len(fields[b.field])
-				failIf(t, n > b.limit, "%s is %d bytes of JSON text, want whole entries within %d", b.field, n, b.limit)
+				testutil.FailIf(t, n > b.limit, "%s is %d bytes of JSON text, want whole entries within %d", b.field, n, b.limit)
 			}
 			status, _ := dryRunResult(t, fields["podSecurityDryRun"])
-			failIf(t, status != 0, "podSecurityDryRun.exitStatus = %d, want 0 for a dry run that succeeded", status)
+			testutil.FailIf(t, status != 0, "podSecurityDryRun.exitStatus = %d, want 0 for a dry run that succeeded", status)
 			sameJSON(t, "jwks", fields["jwks"], jwksOfLength(jwksLimit))
 			h := hardeningOf(t, fields)
 			for _, c := range hardeningCommands {
 				status, output := commandResult(t, "hardening."+c.field, h[c.field], c.limit)
-				failIf(t, status != 0 || output == "", "hardening.%s carries exitStatus %d and %d bytes of output, want 0 and the start of what it printed", c.field, status, len(output))
+				testutil.FailIf(t, status != 0 || output == "", "hardening.%s carries exitStatus %d and %d bytes of output, want 0 and the start of what it printed", c.field, status, len(output))
 			}
 			probe := decodeKeptProbe(t, "hardening.metadataProbe", h["metadataProbe"])
-			failIf(t, probe.Log == "" || jsonTextLen(probe.Log) > metadataProbeLogLimit, "hardening.metadataProbe.log is %d bytes of JSON text, want some and at most %d", jsonTextLen(probe.Log), metadataProbeLogLimit)
+			testutil.FailIf(t, probe.Log == "" || jsonTextLen(probe.Log) > metadataProbeLogLimit, "hardening.metadataProbe.log is %d bytes of JSON text, want some and at most %d", jsonTextLen(probe.Log), metadataProbeLogLimit)
 			patching := patchingOf(t, fields)
 			assertPatchingWithinBounds(t, fields)
 			status, output := commandResult(t, "patching.autoUpgradeUnits", patching["autoUpgradeUnits"], autoUpgradeUnitsLimit)
-			failIf(t, status != 0 || output == "", "patching.autoUpgradeUnits carries exitStatus %d and %d bytes of output, want 0 and the start of what it printed", status, len(output))
+			testutil.FailIf(t, status != 0 || output == "", "patching.autoUpgradeUnits carries exitStatus %d and %d bytes of output, want 0 and the start of what it printed", status, len(output))
 			log, uu := patchingString(t, r, "unattendedUpgradesLog"), largestUnattendedUpgradesLog()
 			n2 := jsonTextLen(log)
-			failIf(t, log == "" || n2 > unattendedUpgradesLogLimit || lastLine(log) != uu[len(uu)-1], "patching.unattendedUpgradesLog is %d bytes of JSON text ending %q, want the newest lines within %d", n2, truncate(lastLine(log), 80), unattendedUpgradesLogLimit)
+			testutil.FailIf(t, log == "" || n2 > unattendedUpgradesLogLimit || lastLine(log) != uu[len(uu)-1], "patching.unattendedUpgradesLog is %d bytes of JSON text ending %q, want the newest lines within %d", n2, testutil.Truncate(lastLine(log), 80), unattendedUpgradesLogLimit)
 			reboot := reportedReboot(t, patching["rebootRequired"])
-			failIf(t, !reboot.Exists || reboot.Packages == "" || jsonTextLen(reboot.Packages) > rebootPackagesLimit, "patching.rebootRequired = exists %v with %d bytes of JSON text of packages, want a pending reboot and at most %d", reboot.Exists, jsonTextLen(reboot.Packages), rebootPackagesLimit)
+			testutil.FailIf(t, !reboot.Exists || reboot.Packages == "" || jsonTextLen(reboot.Packages) > rebootPackagesLimit, "patching.rebootRequired = exists %v with %d bytes of JSON text of packages, want a pending reboot and at most %d", reboot.Exists, jsonTextLen(reboot.Packages), rebootPackagesLimit)
 			for _, part := range []string{"current", "previous"} {
-				got := stringOf(t, "patching.kured."+part, objectOf(t, "patching.kured", patching["kured"], "current", "previous")[part])
+				got := stringOf(t, "patching.kured."+part, testutil.ObjectOf(t, "patching.kured", patching["kured"], "current", "previous")[part])
 				n := jsonTextLen(got)
-				failIf(t, got == "" || n > kuredLogLimit, "patching.kured.%s is %d bytes of JSON text, want the end of the log within %d", part, n, kuredLogLimit)
+				testutil.FailIf(t, got == "" || n > kuredLogLimit, "patching.kured.%s is %d bytes of JSON text, want the end of the log within %d", part, n, kuredLogLimit)
 			}
-			plans := objectOf(t, "patching.upgradePlans", patching["upgradePlans"], "jobs", "plans")
+			plans := testutil.ObjectOf(t, "patching.upgradePlans", patching["upgradePlans"], "jobs", "plans")
 			for _, b := range []struct {
 				part  string
 				limit int
 			}{{"plans", upgradePlansLimit}, {"jobs", upgradeJobsLimit}} {
 				assertNonEmptyList(t, "patching.upgradePlans."+b.part, plans[b.part])
 				n := len(plans[b.part])
-				failIf(t, n > b.limit, "patching.upgradePlans.%s is %d bytes of JSON text, want whole entries within %d", b.part, n, b.limit)
+				testutil.FailIf(t, n > b.limit, "patching.upgradePlans.%s is %d bytes of JSON text, want whole entries within %d", b.part, n, b.limit)
 			}
 			assertLargestScansCarried(t, fields)
 		}},
@@ -1928,17 +1890,17 @@ func TestReportScript_BodyStaysUnder256KiB(t *testing.T) {
 			k3sFailing(readSecrets, 1, strings.Repeat("E", 1<<20)), k3sFailing(readNamespaces, 1, strings.Repeat("E", 1<<20)), k3sFailing(readConfigz, 1, strings.Repeat("E", 1<<20)),
 			k3sFailing(readJWKS, 1, strings.Repeat("E", 1<<20))), withSource(reportOSReleaseEnv, "os-release", strings.Repeat("o", 2*osReleaseLimit)),
 			withLargestProbe()), check: func(t *testing.T, r *reportRig) {
-			fatalIf(t, !json.Valid(r.req.Body), "the report body is not valid JSON")
+			testutil.FatalIf(t, !json.Valid(r.req.Body), "the report body is not valid JSON")
 			_, gotJournal := postedReport(t, r.req)
 			n, kept := len(r.req.Body), jsonTextLen(gotJournal)
 			rest := n - kept
-			fatalIf(t, rest+reportJournalBudget <= reportBodyMax, "every other field takes %d bytes, so a %d-byte journal still fits within %d and this proves nothing", rest, reportJournalBudget, reportBodyMax)
+			testutil.FatalIf(t, rest+reportJournalBudget <= reportBodyMax, "every other field takes %d bytes, so a %d-byte journal still fits within %d and this proves nothing", rest, reportJournalBudget, reportBodyMax)
 			lines := strings.Count(gotJournal, "\n")
-			fatalIf(t, n > reportBodyMax || kept >= reportJournalBudget || lines == 0 || lines >= len(journal), "the body is %d bytes and the journal %d bytes of JSON text in %d lines, want the body within %d and a journal shrunk below %d to some of the newest lines", n, kept, lines, reportBodyMax, reportJournalBudget)
+			testutil.FatalIf(t, n > reportBodyMax || kept >= reportJournalBudget || lines == 0 || lines >= len(journal), "the body is %d bytes and the journal %d bytes of JSON text in %d lines, want the body within %d and a journal shrunk below %d to some of the newest lines", n, kept, lines, reportBodyMax, reportJournalBudget)
 			want := strings.Join(journal[len(journal)-lines:], "\n") + "\n"
-			failIf(t, gotJournal != want, "the journal is not the newest %d whole lines: it ends %q", lines, truncate(lastLine(gotJournal), 80))
+			testutil.FailIf(t, gotJournal != want, "the journal is not the newest %d whole lines: it ends %q", lines, testutil.Truncate(lastLine(gotJournal), 80))
 			next := jsonTextLen(journal[len(journal)-lines-1] + "\n")
-			failIf(t, n+next <= reportBodyMax, "the body is %d bytes with room for the next %d-byte journal line within %d, want the journal to keep every line that fits", n, next, reportBodyMax)
+			testutil.FailIf(t, n+next <= reportBodyMax, "the body is %d bytes with room for the next %d-byte journal line within %d, want the journal to keep every line that fits", n, next, reportBodyMax)
 		}},
 	}
 	runReportCases(t, cases)
@@ -1946,7 +1908,7 @@ func TestReportScript_BodyStaysUnder256KiB(t *testing.T) {
 
 func argocdOf(t *testing.T, r *reportRig) map[string]json.RawMessage {
 	t.Helper()
-	return objectOf(t, "argocd", r.fields()["argocd"], "ingresses", "routes", "services")
+	return testutil.ObjectOf(t, "argocd", r.fields()["argocd"], "ingresses", "routes", "services")
 }
 
 func wantRouteEntry(path string, a argocdAnswer) map[string]any {
@@ -1972,7 +1934,7 @@ func wantRoutes(answers map[string]argocdAnswer) string {
 	for _, path := range argocdRoutePaths {
 		entries = append(entries, wantRouteEntry(path, answers[path]))
 	}
-	return mustJSON(entries)
+	return testutil.MustJSON(entries)
 }
 
 func withAnswers(overrides map[string]argocdAnswer) map[string]argocdAnswer {
@@ -2003,7 +1965,7 @@ func assertBoundedSeconds(t *testing.T, argv []string, limit float64, names ...s
 	t.Helper()
 	v, ok := optionValue(argv, names...)
 	secs, err := strconv.ParseFloat(v, 64)
-	failIf(t, !ok || err != nil || secs <= 0 || secs > limit, "curl %v: %v = %q, want a number of seconds above 0 and at most %v", argv, names, v, limit)
+	testutil.FailIf(t, !ok || err != nil || secs <= 0 || secs > limit, "curl %v: %v = %q, want a number of seconds above 0 and at most %v", argv, names, v, limit)
 }
 
 func TestReportScript_ArgoCDExposure(t *testing.T) {
@@ -2037,14 +1999,14 @@ func TestReportScript_ArgoCDExposure(t *testing.T) {
 						urls = append(urls, arg)
 					}
 				}
-				fatalIf(t, len(urls) != 1, "a probe named %d URLs in %v, want one", len(urls), a.Argv)
+				testutil.FatalIf(t, len(urls) != 1, "a probe named %d URLs in %v, want one", len(urls), a.Argv)
 				got = append(got, urls[0])
 			}
 			var want []string
 			for _, path := range argocdRoutePaths {
 				want = append(want, argocdBaseURL+path)
 			}
-			failIf(t, !slices.Equal(got, want), "the node asked %v, want %v", got, want)
+			testutil.FailIf(t, !slices.Equal(got, want), "the node asked %v, want %v", got, want)
 		}},
 		{name: "lists Services and Ingresses of the argocd namespace as JSON", check: func(t *testing.T, r *reportRig) {
 			var services, ingresses bool
@@ -2055,35 +2017,35 @@ func TestReportScript_ArgoCDExposure(t *testing.T) {
 				services = services || slices.Contains([]string{"service", "services", "svc"}, c.positional[1])
 				ingresses = ingresses || slices.Contains([]string{"ingress", "ingresses", "ing"}, c.positional[1])
 			}
-			failIf(t, !services || !ingresses, "k3s kubectl calls %v: Services list %v, Ingresses list %v, want both in -n argocd", r.k3s.calls(t), services, ingresses)
+			testutil.FailIf(t, !services || !ingresses, "k3s kubectl calls %v: Services list %v, Ingresses list %v, want both in -n argocd", r.k3s.calls(t), services, ingresses)
 		}},
 		{name: "sends no credential, follows no redirect and asks with the self-signed, https-only, bounded flags", check: func(t *testing.T, r *reportRig) {
 			attempts := r.curl.attempts(t)
-			fatalIf(t, len(attempts) != len(argocdRoutePaths), "the node made %d probes, want %d", len(attempts), len(argocdRoutePaths))
+			testutil.FatalIf(t, len(attempts) != len(argocdRoutePaths), "the node made %d probes, want %d", len(attempts), len(argocdRoutePaths))
 			for _, a := range attempts {
 				line := strings.ToLower(strings.Join(a.Argv, " "))
 				for _, banned := range []string{"authorization", "cookie", "bearer", "token"} {
-					failIf(t, strings.Contains(line, banned), "curl %v carries %q, and a probe sends no credential", a.Argv, banned)
+					testutil.FailIf(t, strings.Contains(line, banned), "curl %v carries %q, and a probe sends no credential", a.Argv, banned)
 				}
 				for _, long := range []string{"--location", "--location-trusted", "--cookie", "--cookie-jar", "--user", "--netrc", "--config", "--oauth2-bearer", "--data", "--data-binary", "--form", "--upload-file", "--fail"} {
-					failIf(t, slices.Contains(a.Argv, long), "curl %v carries %s", a.Argv, long)
+					testutil.FailIf(t, slices.Contains(a.Argv, long), "curl %v carries %s", a.Argv, long)
 				}
 				for _, short := range []rune{'L', 'b', 'c', 'u', 'n', 'K', 'd', 'F', 'T', 'f'} {
-					failIf(t, shortFlag(a.Argv, short), "curl %v carries -%c", a.Argv, short)
+					testutil.FailIf(t, shortFlag(a.Argv, short), "curl %v carries -%c", a.Argv, short)
 				}
 				header, hasHeader := optionValue(a.Argv, "-H", "--header")
-				failIf(t, hasHeader && strings.HasPrefix(header, "@"), "curl %v reads headers from a file", a.Argv)
+				testutil.FailIf(t, hasHeader && strings.HasPrefix(header, "@"), "curl %v reads headers from a file", a.Argv)
 				method, hasMethod := optionValue(a.Argv, "-X", "--request")
-				failIf(t, hasMethod && method != "GET", "curl %v asks with %s, want GET", a.Argv, method)
-				failIf(t, !shortFlag(a.Argv, 'k') && !slices.Contains(a.Argv, "--insecure"), "curl %v lacks -k, and Argo CD's certificate is self-signed", a.Argv)
+				testutil.FailIf(t, hasMethod && method != "GET", "curl %v asks with %s, want GET", a.Argv, method)
+				testutil.FailIf(t, !shortFlag(a.Argv, 'k') && !slices.Contains(a.Argv, "--insecure"), "curl %v lacks -k, and Argo CD's certificate is self-signed", a.Argv)
 				proto, _ := optionValue(a.Argv, "--proto")
-				failIf(t, proto != "=https", "curl %v has --proto %q, want =https", a.Argv, proto)
+				testutil.FailIf(t, proto != "=https", "curl %v has --proto %q, want =https", a.Argv, proto)
 				assertBoundedSeconds(t, a.Argv, 1, "--connect-timeout")
 				assertBoundedSeconds(t, a.Argv, 5, "--max-time", "-m")
-				failIf(t, a.Argv[0] != "-q", "curl %v starts with %q, want -q first so curl reads no ~/.curlrc", a.Argv, a.Argv[0])
+				testutil.FailIf(t, a.Argv[0] != "-q", "curl %v starts with %q, want -q first so curl reads no ~/.curlrc", a.Argv, a.Argv[0])
 				size, hasSize := optionValue(a.Argv, "--max-filesize")
 				bytes, err := strconv.ParseInt(size, 10, 64)
-				failIf(t, !hasSize || err != nil || bytes <= 0 || bytes > 65536, "curl %v: --max-filesize = %q, want a byte count above 0 and at most 65536", a.Argv, size)
+				testutil.FailIf(t, !hasSize || err != nil || bytes <= 0 || bytes > 65536, "curl %v: --max-filesize = %q, want a byte count above 0 and at most 65536", a.Argv, size)
 			}
 		}},
 		{name: "keeps no response text in the report beyond the loggedIn boolean", opts: []reportOption{withArgoCDAnswers(map[string]argocdAnswer{
@@ -2093,11 +2055,11 @@ func TestReportScript_ArgoCDExposure(t *testing.T) {
 			"/api/v1/repocreds": {Status: 200, Body: `{"items":[{"url":"` + argocdSentinel + `"}]}`},
 		})}, check: func(t *testing.T, r *reportRig) {
 			argocdOf(t, r)
-			failIf(t, strings.Contains(strings.ToLower(string(r.req.Body)), argocdSentinel), "the posted report repeats text an Argo CD route answered with")
+			testutil.FailIf(t, strings.Contains(strings.ToLower(string(r.req.Body)), argocdSentinel), "the posted report repeats text an Argo CD route answered with")
 		}},
 		{name: "records a route curl cannot reach with status 0, bytes 0 and its curl exit and still asks the rest", opts: []reportOption{withArgoCDAnswers(unreachable)}, check: func(t *testing.T, r *reportRig) {
 			sameJSON(t, "argocd.routes", argocdOf(t, r)["routes"], wantRoutes(withAnswers(unreachable)))
-			failIf(t, len(r.curl.attempts(t)) != len(argocdRoutePaths), "the node asked %d routes, want all %d after some failed", len(r.curl.attempts(t)), len(argocdRoutePaths))
+			testutil.FailIf(t, len(r.curl.attempts(t)) != len(argocdRoutePaths), "the node asked %d routes, want all %d after some failed", len(r.curl.attempts(t)), len(argocdRoutePaths))
 		}},
 		{name: "lists each Service of the argocd namespace with its name and type", check: func(t *testing.T, r *reportRig) {
 			sameJSON(t, "argocd.services", argocdOf(t, r)["services"], servicesWant)
@@ -2124,17 +2086,17 @@ func TestReportScript_ArgoCDExposure(t *testing.T) {
 			k3sGenerate(readArgoCDServices, "services", 3000, "", nil), k3sGenerate(readArgoCDIngresses, "ingresses", 3000, "", nil)),
 			withArgoCDAnswers(hugeAnswers)), check: func(t *testing.T, r *reportRig) {
 			n := len(r.req.Body)
-			fatalIf(t, n > reportBodyMax || !json.Valid(r.req.Body), "the report body is %d bytes (valid JSON %v), want valid JSON of at most %d", n, json.Valid(r.req.Body), reportBodyMax)
+			testutil.FatalIf(t, n > reportBodyMax || !json.Valid(r.req.Body), "the report body is %d bytes (valid JSON %v), want valid JSON of at most %d", n, json.Valid(r.req.Body), reportBodyMax)
 			a := argocdOf(t, r)
 			sameJSON(t, "argocd.routes", a["routes"], wantRoutes(withAnswers(hugeAnswers)))
 			for _, part := range []string{"services", "ingresses"} {
 				assertNonEmptyList(t, "argocd."+part, a[part])
-				failIf(t, len(a[part]) > argocdListLimit, "argocd.%s is %d bytes of JSON text, want whole entries within %d", part, len(a[part]), argocdListLimit)
+				testutil.FailIf(t, len(a[part]) > argocdListLimit, "argocd.%s is %d bytes of JSON text, want whole entries within %d", part, len(a[part]), argocdListLimit)
 			}
 		}},
 		{name: "records each failed argocd read with its stderr when every k3s kubectl call fails at its largest", opts: largestBody(t, false), check: func(t *testing.T, r *reportRig) {
 			n := len(r.req.Body)
-			fatalIf(t, n > reportBodyMax || !json.Valid(r.req.Body), "the report body is %d bytes (valid JSON %v), want valid JSON of at most %d", n, json.Valid(r.req.Body), reportBodyMax)
+			testutil.FatalIf(t, n > reportBodyMax || !json.Valid(r.req.Body), "the report body is %d bytes (valid JSON %v), want valid JSON of at most %d", n, json.Valid(r.req.Body), reportBodyMax)
 			a := argocdOf(t, r)
 			for _, part := range []string{"services", "ingresses"} {
 				assertKubectlFailure(t, "argocd."+part, a[part], 1, "EEEE")
@@ -2160,8 +2122,8 @@ func TestReportScript_ArgoCDExposure(t *testing.T) {
 		cases = append(cases, reportCase{name: "reads userinfo loggedIn as " + c.name, opts: []reportOption{withArgoCDAnswers(c.answer)}, check: func(t *testing.T, r *reportRig) {
 			routes := argocdOf(t, r)["routes"]
 			var entries []json.RawMessage
-			fatalIf(t, json.Unmarshal(routes, &entries) != nil || len(entries) == 0, "argocd.routes = %s, want a list of routes", truncate(string(routes), 200))
-			sameJSON(t, "argocd.routes[0]", entries[0], mustJSON(wantRouteEntry(argocdUserinfoPath, c.answer[argocdUserinfoPath])))
+			testutil.FatalIf(t, json.Unmarshal(routes, &entries) != nil || len(entries) == 0, "argocd.routes = %s, want a list of routes", testutil.Truncate(string(routes), 200))
+			sameJSON(t, "argocd.routes[0]", entries[0], testutil.MustJSON(wantRouteEntry(argocdUserinfoPath, c.answer[argocdUserinfoPath])))
 			sameJSON(t, "argocd.routes", routes, wantRoutes(withAnswers(c.answer)))
 		}})
 	}
@@ -2179,26 +2141,26 @@ func TestArgoCDFakes_AnswerAsCurlAndKubectlDo(t *testing.T) {
 		if errors.As(err, &exit) {
 			return string(out), exit.ExitCode()
 		}
-		fatalIf(t, err != nil, "running the fake curl: %v", err)
+		testutil.FatalIf(t, err != nil, "running the fake curl: %v", err)
 		return string(out), 0
 	}
 	common := []string{"-sS", "-k", "--proto", "=https", "-o", "/dev/null", "-w", "%{http_code} %{size_download}"}
 
 	out, exit := run(append(common, argocdBaseURL+"/api/v1/a")...)
-	failIf(t, out != "401 5" || exit != 0, "a answered %q exit %d, want \"401 5\" exit 0", out, exit)
+	testutil.FailIf(t, out != "401 5" || exit != 0, "a answered %q exit %d, want \"401 5\" exit 0", out, exit)
 	out, exit = run(append(common, argocdBaseURL+"/api/v1/b")...)
-	failIf(t, out != "000 0" || exit != 28, "b answered %q exit %d, want \"000 0\" exit 28", out, exit)
+	testutil.FailIf(t, out != "000 0" || exit != 28, "b answered %q exit %d, want \"000 0\" exit 28", out, exit)
 	out, exit = run("-sS", "--proto", "=https", argocdBaseURL+"/api/v1/a")
-	failIf(t, out != "" || exit != 60, "a without -k answered %q exit %d, want nothing and exit 60", out, exit)
+	testutil.FailIf(t, out != "" || exit != 60, "a without -k answered %q exit %d, want nothing and exit 60", out, exit)
 	out, exit = run("-sSk", argocdBaseURL+"/api/v1/a")
-	failIf(t, out != "hello" || exit != 0, "a to stdout answered %q exit %d, want hello exit 0", out, exit)
+	testutil.FailIf(t, out != "hello" || exit != 0, "a to stdout answered %q exit %d, want hello exit 0", out, exit)
 	out, exit = run("-sSk", "--proto", "=https", "http://"+argocdClusterIP+"/api/v1/a")
-	failIf(t, out != "" || exit != 1, "a over http answered %q exit %d, want nothing and exit 1", out, exit)
-	failIf(t, len(curl.attempts(t)) != 5, "the fake logged %d probes, want 5", len(curl.attempts(t)))
+	testutil.FailIf(t, out != "" || exit != 1, "a over http answered %q exit %d, want nothing and exit 1", out, exit)
+	testutil.FailIf(t, len(curl.attempts(t)) != 5, "the fake logged %d probes, want 5", len(curl.attempts(t)))
 
 	k3s := newFakeK3s(t)
 	got, err := exec.Command(k3s.path, "kubectl", "get", "service", "argocd-server", "-n", "argocd", "-o", "jsonpath={.spec.clusterIP}").Output()
-	failIf(t, err != nil || string(got) != argocdClusterIP, "the cluster IP read answered %q (%v), want %s", got, err, argocdClusterIP)
+	testutil.FailIf(t, err != nil || string(got) != argocdClusterIP, "the cluster IP read answered %q (%v), want %s", got, err, argocdClusterIP)
 }
 
 type admissionEntry struct {
@@ -2212,7 +2174,7 @@ func admissionOf(t *testing.T, r *reportRig) []admissionEntry {
 	t.Helper()
 	var entries []admissionEntry
 	raw := reportFields(t, r.req)["admission"]
-	fatalIf(t, json.Unmarshal(raw, &entries) != nil || entries == nil, "admission = %s, want a list", truncate(string(raw), 300))
+	testutil.FatalIf(t, json.Unmarshal(raw, &entries) != nil || entries == nil, "admission = %s, want a list", testutil.Truncate(string(raw), 300))
 	return entries
 }
 
@@ -2244,24 +2206,24 @@ func TestReportScript_Admission(t *testing.T) {
 		}},
 		{name: "applies each fixture once as a server dry run into the probe namespace", check: func(t *testing.T, r *reportRig) {
 			calls := applyCalls(t, r)
-			failIf(t, len(calls) != 6, "the node applied %d fixtures, want 6", len(calls))
+			testutil.FailIf(t, len(calls) != 6, "the node applied %d fixtures, want 6", len(calls))
 			for _, c := range calls {
-				failIf(t, c.flags["--dry-run"] != "server" || c.flags["--namespace"] != admissionNamespace || c.flags["--filename"] != "-" || c.flags["--request-timeout"] != "10s", "apply ran as %q", c.line())
+				testutil.FailIf(t, c.flags["--dry-run"] != "server" || c.flags["--namespace"] != admissionNamespace || c.flags["--filename"] != "-" || c.flags["--request-timeout"] != "10s", "apply ran as %q", c.line())
 			}
 		}},
 		{name: "dry-runs mitstack-node's own fixtures in mitstack-node after the probe namespace's", opts: []reportOption{withK3s(
 			k3sNodeFixtures(map[string]string{"mitstack-verify-node-agent-signature-unsigned": "apiVersion: v1\nkind: Pod\n"}),
 			k3sApplying("mitstack-verify-node-agent-signature-unsigned", "", "admission webhook denied the request\n", 1))}, check: func(t *testing.T, r *reportRig) {
 			entries, calls := admissionOf(t, r), applyCalls(t, r)
-			fatalIf(t, len(entries) != 7 || len(calls) != 7, "the report carries %d admission entries from %d dry runs, want 7 of each", len(entries), len(calls))
+			testutil.FatalIf(t, len(entries) != 7 || len(calls) != 7, "the report carries %d admission entries from %d dry runs, want 7 of each", len(entries), len(calls))
 			last := entries[6]
-			failIf(t, last.Rule != "mitstack-verify-node-agent-signature-unsigned" || last.ExitStatus != 1 || last.Message != "admission webhook denied the request\n", "the last entry = %+v, want the mitstack-node fixture's refusal", last)
-			failIf(t, calls[6].flags["--namespace"] != "mitstack-node", "the mitstack-node fixture ran as %q, want -n mitstack-node", calls[6].line())
+			testutil.FailIf(t, last.Rule != "mitstack-verify-node-agent-signature-unsigned" || last.ExitStatus != 1 || last.Message != "admission webhook denied the request\n", "the last entry = %+v, want the mitstack-node fixture's refusal", last)
+			testutil.FailIf(t, calls[6].flags["--namespace"] != "mitstack-node", "the mitstack-node fixture ran as %q, want -n mitstack-node", calls[6].line())
 		}},
 		{name: "records an accepted fixture with exit status 0 and what kubectl printed", opts: []reportOption{withK3s(k3sApplying("mitstack-require-image-digest", "deployment.apps/refused-require-image-digest created (server dry run)\n", "", 0))}, check: func(t *testing.T, r *reportRig) {
 			for _, e := range admissionOf(t, r) {
 				if e.Rule == "mitstack-require-image-digest" {
-					failIf(t, e.ExitStatus != 0 || e.Message != "deployment.apps/refused-require-image-digest created (server dry run)\n", "entry = %+v, want exit 0 and the dry run's output", e)
+					testutil.FailIf(t, e.ExitStatus != 0 || e.Message != "deployment.apps/refused-require-image-digest created (server dry run)\n", "entry = %+v, want exit 0 and the dry run's output", e)
 					return
 				}
 			}
@@ -2270,31 +2232,31 @@ func TestReportScript_Admission(t *testing.T) {
 		{name: "skips a ConfigMap key outside a-z, 0-9 and hyphen and applies nothing for it", opts: []reportOption{withK3s(k3sFixtures(map[string]string{
 			rule: "apiVersion: v1\n", "Upper": "apiVersion: v1\n# a\n", "under_score": "apiVersion: v1\n# b\n", "dot.ted": "apiVersion: v1\n# c\n", "with space": "apiVersion: v1\n# d\n"}))}, check: func(t *testing.T, r *reportRig) {
 			entries := admissionOf(t, r)
-			failIf(t, len(entries) != 1 || entries[0].Rule != rule, "admission = %+v, want only %s", entries, rule)
-			failIf(t, len(applyCalls(t, r)) != 1, "the node applied %d fixtures, want 1", len(applyCalls(t, r)))
+			testutil.FailIf(t, len(entries) != 1 || entries[0].Rule != rule, "admission = %+v, want only %s", entries, rule)
+			testutil.FailIf(t, len(applyCalls(t, r)) != 1, "the node applied %d fixtures, want 1", len(applyCalls(t, r)))
 		}},
 		{name: "reports an empty list and applies nothing when the ConfigMap holds no data", opts: []reportOption{withK3s(k3sFixtures(nil))}, check: func(t *testing.T, r *reportRig) {
-			failIf(t, len(admissionOf(t, r)) != 0 || len(applyCalls(t, r)) != 0, "admission = %s with %d applies, want [] and none", reportFields(t, r.req)["admission"], len(applyCalls(t, r)))
+			testutil.FailIf(t, len(admissionOf(t, r)) != 0 || len(applyCalls(t, r)) != 0, "admission = %s with %d applies, want [] and none", reportFields(t, r.req)["admission"], len(applyCalls(t, r)))
 		}},
 		{name: "clips the fixture to 4096 bytes and the message to 2048 bytes of JSON text", opts: []reportOption{withK3s(
 			k3sFixtures(map[string]string{rule: "apiVersion: v1 " + strings.Repeat("x", 10000)}), k3sApplying(rule, "", "Error: "+strings.Repeat("m", 10000), 1))}, check: func(t *testing.T, r *reportRig) {
 			e := admissionOf(t, r)[0]
-			failIf(t, e.Fixture != ("apiVersion: v1 " + strings.Repeat("x", 10000))[:admissionFixtureLimit] || e.Message != ("Error: " + strings.Repeat("m", 10000))[:admissionMessageLimit], "fixture is %d bytes and message %d, want the first %d and %d", len(e.Fixture), len(e.Message), admissionFixtureLimit, admissionMessageLimit)
+			testutil.FailIf(t, e.Fixture != ("apiVersion: v1 " + strings.Repeat("x", 10000))[:admissionFixtureLimit] || e.Message != ("Error: " + strings.Repeat("m", 10000))[:admissionMessageLimit], "fixture is %d bytes and message %d, want the first %d and %d", len(e.Fixture), len(e.Message), admissionFixtureLimit, admissionMessageLimit)
 		}},
 		{name: "counts JSON text when clipping, so quotes cost two bytes each", opts: []reportOption{withK3s(k3sFixtures(map[string]string{rule: quotes}), k3sApplying(rule, "", quotes, 1))}, check: func(t *testing.T, r *reportRig) {
 			e := admissionOf(t, r)[0]
-			failIf(t, e.Fixture != quotes[:admissionFixtureLimit/2] || e.Message != quotes[:admissionMessageLimit/2], "fixture is %d quotes and message %d, want %d and %d", len(e.Fixture), len(e.Message), admissionFixtureLimit/2, admissionMessageLimit/2)
+			testutil.FailIf(t, e.Fixture != quotes[:admissionFixtureLimit/2] || e.Message != quotes[:admissionMessageLimit/2], "fixture is %d quotes and message %d, want %d and %d", len(e.Fixture), len(e.Message), admissionFixtureLimit/2, admissionMessageLimit/2)
 		}},
 		{name: "reports all six rules at their largest", opts: []reportOption{withK3s(sixOpts...)}, check: func(t *testing.T, r *reportRig) {
 			entries := admissionOf(t, r)
-			failIf(t, len(entries) != 6, "admission holds %d entries, want all 6 rules at their largest", len(entries))
+			testutil.FailIf(t, len(entries) != 6, "admission holds %d entries, want all 6 rules at their largest", len(entries))
 			for _, e := range entries {
-				failIf(t, jsonTextLen(e.Fixture) > admissionFixtureLimit || jsonTextLen(e.Message) > admissionMessageLimit || len(e.Fixture) < admissionFixtureLimit-8 || len(e.Message) < admissionMessageLimit-8, "%s fixture %d bytes, message %d bytes, want each clipped to its limit", e.Rule, len(e.Fixture), len(e.Message))
+				testutil.FailIf(t, jsonTextLen(e.Fixture) > admissionFixtureLimit || jsonTextLen(e.Message) > admissionMessageLimit || len(e.Fixture) < admissionFixtureLimit-8 || len(e.Message) < admissionMessageLimit-8, "%s fixture %d bytes, message %d bytes, want each clipped to its limit", e.Rule, len(e.Fixture), len(e.Message))
 			}
 		}},
 		{name: "keeps the body within 256 KiB with forty full-size fixtures", opts: []reportOption{withK3s(k3sGenerate(readAdmissionFixtures, "admissionFixtures", 40, "", nil))}, check: func(t *testing.T, r *reportRig) {
-			failIf(t, len(r.req.Body) > reportBodyMax || !json.Valid(r.req.Body), "the body is %d bytes (valid %v), want valid JSON within %d", len(r.req.Body), json.Valid(r.req.Body), reportBodyMax)
-			failIf(t, len(admissionOf(t, r)) < 6, "admission holds %d entries, want at least the six rules", len(admissionOf(t, r)))
+			testutil.FailIf(t, len(r.req.Body) > reportBodyMax || !json.Valid(r.req.Body), "the body is %d bytes (valid %v), want valid JSON within %d", len(r.req.Body), json.Valid(r.req.Body), reportBodyMax)
+			testutil.FailIf(t, len(admissionOf(t, r)) < 6, "admission holds %d entries, want at least the six rules", len(admissionOf(t, r)))
 		}},
 		{name: "lists only mitstack-default-deny policies with their rule counts, selector, types and manager", check: func(t *testing.T, r *reportRig) {
 			sameJSON(t, "defaultDenyPolicies", reportFields(t, r.req)["defaultDenyPolicies"], testFile("want/default-deny-policies.json"))
@@ -2305,7 +2267,7 @@ func TestReportScript_Admission(t *testing.T) {
 		{name: "keeps whole defaultDenyPolicies entries within 4096 bytes", opts: []reportOption{withK3s(k3sGenerate(readDefaultDeny, "networkPolicies", 3000, "", nil))}, check: func(t *testing.T, r *reportRig) {
 			raw := reportFields(t, r.req)["defaultDenyPolicies"]
 			assertNonEmptyList(t, "defaultDenyPolicies", raw)
-			failIf(t, len(raw) > defaultDenyLimit, "defaultDenyPolicies is %d bytes, want whole entries within %d", len(raw), defaultDenyLimit)
+			testutil.FailIf(t, len(raw) > defaultDenyLimit, "defaultDenyPolicies is %d bytes, want whole entries within %d", len(raw), defaultDenyLimit)
 		}},
 		{name: "lists only app namespace certificates with their Ready status, reason and message", check: func(t *testing.T, r *reportRig) {
 			sameJSON(t, "certificates", reportFields(t, r.req)["certificates"], testFile("want/certificates.json"))
@@ -2322,7 +2284,7 @@ func TestReportScript_Admission(t *testing.T) {
 		}},
 		{name: "clips a certificate's Ready message like an Application condition message", opts: []reportOption{withK3s(
 			k3sAnswer(readCertificates, extremeList([]any{certificateIn("app-long", "long-tls", "False", "Failed", strings.Repeat("m", 2000))})))}, check: func(t *testing.T, r *reportRig) {
-			sameJSON(t, "certificates", reportFields(t, r.req)["certificates"], mustJSON([]any{map[string]any{
+			sameJSON(t, "certificates", reportFields(t, r.req)["certificates"], testutil.MustJSON([]any{map[string]any{
 				"namespace": "app-long", "name": "long-tls", "status": "False", "reason": "Failed", "message": strings.Repeat("m", applicationConditionMessageLimit)}}))
 		}},
 	}
@@ -2330,23 +2292,18 @@ func TestReportScript_Admission(t *testing.T) {
 }
 
 const (
-	dedicatedServerFile  = "dedicated-server.json"
 	dedicatedServerLimit = 2048
-
-	fixtureUplink           = "enp5s0"
-	fixtureVSwitchInterface = fixtureUplink + ".4000"
-	fixtureVSwitchGateway   = "10.254.0.1"
 )
 
 func largestDedicatedServerFacts(t *testing.T) string {
 	t.Helper()
 	facts := map[string]any{"checkedAt": "2026-10-12T09:20:00Z", "tpm": true, "tpmDevices": []string{"tpm0"}, "vswitch": "dropped",
-		"vswitchProbe": map[string]any{"interface": fixtureVSwitchInterface, "gateway": fixtureVSwitchGateway, "echoRequests": 3,
+		"vswitchProbe": map[string]any{"interface": testutil.FixtureVSwitchInterface, "gateway": testutil.FixtureVSwitchGateway, "echoRequests": 3,
 			"echoReplies": 0, "neighbour": "", "pingExitStatus": 1}}
-	empty := len(mustJSON(facts))
+	empty := len(testutil.MustJSON(facts))
 	facts["vswitchProbe"].(map[string]any)["neighbour"] = strings.Repeat("S", dedicatedServerLimit-empty)
-	out := mustJSON(facts)
-	fatalIf(t, len(out) != dedicatedServerLimit, "the largest dedicated facts are %d bytes, want exactly the %d-byte bound", len(out), dedicatedServerLimit)
+	out := testutil.MustJSON(facts)
+	testutil.FatalIf(t, len(out) != dedicatedServerLimit, "the largest dedicated facts are %d bytes, want exactly the %d-byte bound", len(out), dedicatedServerLimit)
 	return out
 }
 
@@ -2356,5 +2313,5 @@ func TestReportScript_ACloudServerReportsNoDedicatedFacts(t *testing.T) {
 
 	got := string(r.fields()["dedicatedServer"])
 
-	failIf(t, got != "null", "dedicatedServer = %s on a node no probe ran on, want null", truncate(got, 200))
+	testutil.FailIf(t, got != "null", "dedicatedServer = %s on a node no probe ran on, want null", testutil.Truncate(got, 200))
 }

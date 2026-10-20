@@ -3,9 +3,7 @@ package cluster
 // bootcomponents_test.go pins how mitstack's own cluster, whose subscription sets hostsPlatform, boots with no platform running.
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"maps"
 	"os"
 	"path"
@@ -16,19 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ProtonMail/go-crypto/openpgp"
-	"github.com/ProtonMail/go-crypto/openpgp/armor"
-	"github.com/ProtonMail/go-crypto/openpgp/packet"
+	"github.com/mitstack-eu/k3s-cluster-kit/testutil"
 )
 
 const (
-	fixtureSealKey        = "8d26485ad7c5645f1cf12799be1b701d3cccc5cfe56fe967dbf282199e1af1ce"
-	fixtureGitHubAppID    = "1234567"
-	fixtureInstallationID = "171311443"
-
-	bootDir            = "/var/lib/rancher/k3s/server/manifests"
-	sealKeyFile        = bootDir + "/01-openbao-seal-key.yaml"
-	credentialFile     = bootDir + "/03-cluster-repository.yaml"
+	credentialFile     = testutil.BootDir + "/03-cluster-repository.yaml"
 	enrolTimerPath     = systemdDir + "/mitstack-enrol.timer"
 	wantOpenBaoDataDir = "/var/lib/openbao"
 
@@ -45,8 +35,6 @@ var wantBootTrees = map[string]string{
 	"traefik":          "e80568c1ae9f33d598c1dbf55ae48c1234360351",
 	"sealed-secrets":   "559ed2bdbfe2497fe523cc0d69ecab6e3cdd93a7",
 }
-
-var hexSealKey = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 var listenerBlockRe = regexp.MustCompile(`(?s)listener "tcp" \{(.*?)\}`)
 
@@ -65,60 +53,9 @@ func hostsPlatformRenderInputs() UserDataInputs {
 	if err != nil {
 		panic(err)
 	}
-	in.HostsPlatform = &HostsPlatformInputs{SealKey: fixtureSealKey, AppID: fixtureGitHubAppID, InstallationID: fixtureInstallationID, PublicIPv4: fixtureIngressIPv4,
+	in.HostsPlatform = &HostsPlatformInputs{SealKey: testutil.FixtureSealKey, AppID: testutil.FixtureGitHubAppID, InstallationID: testutil.FixtureInstallationID, PublicIPv4: testutil.FixtureIngressIPv4,
 		Recipient: bootFixture("owner.asc"), SealedSecrets: SealedSecretsInputs{KeyPEM: bootFixture("sealed-secrets.key"), CertPEM: bootFixture("sealed-secrets.crt"), SealedAppKey: app}}
 	return in
-}
-
-// ownerKey is a fresh OpenPGP key pair and its armored public half, standing in for the owner's.
-func ownerKey(t *testing.T) (*openpgp.Entity, string) {
-	t.Helper()
-	e, err := openpgp.NewEntity("Owner", "", "owner@example.test", &packet.Config{Algorithm: packet.PubKeyAlgoEdDSA})
-	fatalIf(t, err != nil, "generating the owner's key: %v", err)
-	var b bytes.Buffer
-	w, err := armor.Encode(&b, openpgp.PublicKeyType, nil)
-	fatalIf(t, err != nil, "armoring the owner's key: %v", err)
-	fatalIf(t, e.Serialize(w) != nil || w.Close() != nil, "serializing the owner's key")
-	return e, b.String()
-}
-
-func decryptFor(t *testing.T, e *openpgp.Entity, message string) string {
-	t.Helper()
-	block, err := armor.Decode(strings.NewReader(message))
-	fatalIf(t, err != nil || block.Type != "PGP MESSAGE", "%q is not an armored PGP message: %v", message, err)
-	md, err := openpgp.ReadMessage(block.Body, openpgp.EntityList{e}, nil, nil)
-	fatalIf(t, err != nil, "the owner's key cannot decrypt the message: %v", err)
-	plain, err := io.ReadAll(md.UnverifiedBody)
-	fatalIf(t, err != nil, "reading the decrypted message: %v", err)
-	return string(plain)
-}
-
-// bootDocs maps each file in k3s's auto-deploy directory to the documents it holds.
-func bootDocs(t *testing.T, cc cloudConfig) map[string][]map[string]any {
-	t.Helper()
-	docs := map[string][]map[string]any{}
-	for _, f := range cc.WriteFiles {
-		if path.Dir(f.Path) == bootDir && strings.HasSuffix(f.Path, ".yaml") {
-			docs[path.Base(f.Path)] = yamlDocs(t, f.Path, f.Content)
-		}
-	}
-	return docs
-}
-
-// onlyDoc finds the one document of a kind and name, and the file that holds it.
-func onlyDoc(t *testing.T, docs map[string][]map[string]any, kind, name string) (string, map[string]any) {
-	t.Helper()
-	var file string
-	var found []map[string]any
-	for f, list := range docs {
-		for _, d := range list {
-			if d["kind"] == kind && dig(d, "metadata", "name") == name {
-				file, found = f, append(found, d)
-			}
-		}
-	}
-	fatalIf(t, len(found) != 1, "the auto-deploy directory holds %d %s %s, want exactly one", len(found), kind, name)
-	return file, found[0]
 }
 
 // imageTags lists every tag a chart's values set, at any depth.
@@ -142,34 +79,24 @@ func imageTags(v any) []string {
 
 func chartValuesOf(t *testing.T, what string, chart map[string]any) map[string]any {
 	t.Helper()
-	text, ok := dig(chart, "spec", "valuesContent").(string)
-	fatalIf(t, !ok, "%s carries no valuesContent", what)
-	return yamlMap(t, what+" values", text)
-}
-
-// sealKeyOf reads the seal key a node's user data writes.
-func sealKeyOf(t *testing.T, cc cloudConfig) string {
-	t.Helper()
-	f := cc.file(t, sealKeyFile)
-	_, secret := onlyDoc(t, map[string][]map[string]any{path.Base(f.Path): yamlDocs(t, f.Path, f.Content)}, "Secret", "openbao-seal-key")
-	key, _ := dig(secret, "stringData", "key").(string)
-	fatalIf(t, !hexSealKey.MatchString(key), "the seal key is %d characters, want 64 hex", len(key))
-	return key
+	text, ok := testutil.Dig(chart, "spec", "valuesContent").(string)
+	testutil.FatalIf(t, !ok, "%s carries no valuesContent", what)
+	return testutil.YamlMap(t, what+" values", text)
 }
 
 func TestClusterBases_TheBlockCarriesEachBootComponentAsTheReleaseHoldsIt(t *testing.T) {
 	for component, want := range wantBootTrees {
 		t.Run(component, func(t *testing.T) {
 			entries, err := os.ReadDir("clusterbases/" + component)
-			fatalIf(t, err != nil, "reading clusterbases/%s: %v", component, err)
+			testutil.FatalIf(t, err != nil, "reading clusterbases/%s: %v", component, err)
 			files := map[string]string{}
 			for _, e := range entries {
-				files[e.Name()] = testRepoFile(t, "clusterbases/"+component+"/"+e.Name())
+				files[e.Name()] = testutil.TestRepoFile(t, "clusterbases/"+component+"/"+e.Name())
 			}
 
 			got := gitTreeID(files)
 
-			failIf(t, got != want, "clusterbases/%s is git tree %s holding %v, want %s, its tree at cluster-bases %s", component, got, slices.Sorted(maps.Keys(files)), want, wantClusterBasesTag)
+			testutil.FailIf(t, got != want, "clusterbases/%s is git tree %s holding %v, want %s, its tree at cluster-bases %s", component, got, slices.Sorted(maps.Keys(files)), want, wantClusterBasesTag)
 		})
 	}
 }
@@ -179,13 +106,13 @@ func TestRenderUserData_HostsPlatformStartsK3sWithoutWaitingForEnrolment(t *test
 
 	got := strings.Split(runcmdChain(t, cc), " && ")
 
-	want := []string{sshMask, "systemctl daemon-reload", metadataGuardStart, "install -d -m 0700 " + wantOpenBaoDataDir, cc.nodeScript(t).Path,
-		autoUpgradeEnable, aptDailyRefreshNow, cc.installer(t).Path, "systemctl enable --now k3s", "systemctl enable --now mitstack-enrol.timer"}
-	failIf(t, !slices.Equal(got, want), "runcmd = %q\nwant %q", got, want)
+	want := []string{sshMask, "systemctl daemon-reload", metadataGuardStart, "install -d -m 0700 " + wantOpenBaoDataDir, cc.NodeScript(t).Path,
+		autoUpgradeEnable, aptDailyRefreshNow, cc.Installer(t).Path, "systemctl enable --now k3s", "systemctl enable --now mitstack-enrol.timer"}
+	testutil.FailIf(t, !slices.Equal(got, want), "runcmd = %q\nwant %q", got, want)
 	for _, f := range cc.WriteFiles {
-		failIf(t, f.Path == k3sEnrolDropIn, "the user data writes %s, so k3s would wait for enrolment", k3sEnrolDropIn)
+		testutil.FailIf(t, f.Path == k3sEnrolDropIn, "the user data writes %s, so k3s would wait for enrolment", k3sEnrolDropIn)
 	}
-	failIf(t, cc.enrolScript(t).Path != enrolScriptPath, "the enrol script is at %s, want %s", cc.enrolScript(t).Path, enrolScriptPath)
+	testutil.FailIf(t, cc.EnrolScript(t).Path != enrolScriptPath, "the enrol script is at %s, want %s", cc.EnrolScript(t).Path, enrolScriptPath)
 	for _, r := range []unitRow{
 		{name: "the enrol unit still runs the enrol script", path: enrolUnitPath, one: map[string]string{"Service.ExecStart": enrolScriptPath}},
 		{name: "a timer retries enrolment until the platform answers", path: enrolTimerPath, perms: "0644", timerOf: enrolUnitName,
@@ -198,76 +125,76 @@ func TestRenderUserData_HostsPlatformStartsK3sWithoutWaitingForEnrolment(t *test
 
 func TestRenderUserData_HostsPlatformBootsOpenBaoExternalSecretsAndTraefikBeforeTheClusterRoot(t *testing.T) {
 	_, cc := renderCC(t, hostsPlatformRenderInputs())
-	docs := bootDocs(t, cc)
+	docs := testutil.BootDocs(t, cc)
 
 	for _, component := range slices.Sorted(maps.Keys(wantBootTrees)) {
 		t.Run(component, func(t *testing.T) {
-			file, chart := onlyDoc(t, docs, "HelmChart", component)
-			base := yamlMap(t, component, testRepoFile(t, "clusterbases/"+component+"/helmchart.yaml"))
+			file, chart := testutil.OnlyDoc(t, docs, "HelmChart", component)
+			base := testutil.YamlMap(t, component, testutil.TestRepoFile(t, "clusterbases/"+component+"/helmchart.yaml"))
 			values, baseValues := chartValuesOf(t, component, chart), chartValuesOf(t, "cluster-bases "+component, base)
 
-			failIf(t, file >= "10-cluster-root.yaml", "%s boots from %s, which k3s applies after 10-cluster-root.yaml", component, file)
+			testutil.FailIf(t, file >= "10-cluster-root.yaml", "%s boots from %s, which k3s applies after 10-cluster-root.yaml", component, file)
 			for _, field := range []string{"chart", "repo", "version", "targetNamespace"} {
-				failIf(t, dig(chart, "spec", field) != dig(base, "spec", field), "%s spec.%s = %v, want %v", component, field, dig(chart, "spec", field), dig(base, "spec", field))
+				testutil.FailIf(t, testutil.Dig(chart, "spec", field) != testutil.Dig(base, "spec", field), "%s spec.%s = %v, want %v", component, field, testutil.Dig(chart, "spec", field), testutil.Dig(base, "spec", field))
 			}
 			for k, want := range baseValues {
-				failIf(t, !reflect.DeepEqual(values[k], want), "%s values.%s = %v, want %v as cluster-bases %s sets it", component, k, values[k], want, wantClusterBasesTag)
+				testutil.FailIf(t, !reflect.DeepEqual(values[k], want), "%s values.%s = %v, want %v as cluster-bases %s sets it", component, k, values[k], want, wantClusterBasesTag)
 			}
 			tags := imageTags(values)
-			failIf(t, len(tags) == 0, "%s's values set no image tag", component)
+			testutil.FailIf(t, len(tags) == 0, "%s's values set no image tag", component)
 			for _, tag := range tags {
-				failIf(t, !imageByDigest.MatchString(tag), "%s names an image by %q, want a digest", component, tag)
+				testutil.FailIf(t, !imageByDigest.MatchString(tag), "%s names an image by %q, want a digest", component, tag)
 			}
 		})
 	}
-	_, traefik := onlyDoc(t, docs, "HelmChart", "traefik")
-	assertPaths(t, "the booted Traefik", chartValuesOf(t, "traefik", traefik), map[string]any{
-		"providers.kubernetesIngress.ingressEndpoint.ip": fixtureIngressIPv4,
+	_, traefik := testutil.OnlyDoc(t, docs, "HelmChart", "traefik")
+	testutil.AssertPaths(t, "the booted Traefik", chartValuesOf(t, "traefik", traefik), map[string]any{
+		"providers.kubernetesIngress.ingressEndpoint.ip": testutil.FixtureIngressIPv4,
 		"ports.websecure.nodePort":                       HTTPSNodePort,
 	})
-	_, pv := onlyDoc(t, docs, "PersistentVolume", "openbao-data")
-	failIf(t, dig(pv, "spec", "local", "path") != wantOpenBaoDataDir, "OpenBao's volume is at %v, want %s", dig(pv, "spec", "local", "path"), wantOpenBaoDataDir)
+	_, pv := testutil.OnlyDoc(t, docs, "PersistentVolume", "openbao-data")
+	testutil.FailIf(t, testutil.Dig(pv, "spec", "local", "path") != wantOpenBaoDataDir, "OpenBao's volume is at %v, want %s", testutil.Dig(pv, "spec", "local", "path"), wantOpenBaoDataDir)
 }
 
 func TestRenderUserData_HostsPlatformTakesArgoCDsRepositoryCredentialFromAGitHubApp(t *testing.T) {
 	ud, cc := renderCC(t, hostsPlatformRenderInputs())
-	docs := bootDocs(t, cc)
+	docs := testutil.BootDocs(t, cc)
 
 	for _, absent := range []string{"mitstack-repo-token", "cluster-repository-tokens"} {
-		failIf(t, strings.Contains(cc.allText(ud), absent), "the user data names %s; want no token refresh against the platform", absent)
+		testutil.FailIf(t, strings.Contains(cc.AllText(ud), absent), "the user data names %s; want no token refresh against the platform", absent)
 	}
-	skip := cc.file(t, bootDir+"/05-cluster-repository.yaml.skip")
-	failIf(t, skip.Owner != "root:root" || skip.Permissions != "0600", "%s is %s %s, want root:root 0600", skip.Path, skip.Owner, skip.Permissions)
+	skip := cc.File(t, testutil.BootDir+"/05-cluster-repository.yaml.skip")
+	testutil.FailIf(t, skip.Owner != "root:root" || skip.Permissions != "0600", "%s is %s %s, want root:root 0600", skip.Path, skip.Owner, skip.Permissions)
 
-	file, secret := onlyDoc(t, docs, "ExternalSecret", "cluster-repository")
-	failIf(t, path.Join(bootDir, file) != credentialFile, "the repository credential boots from %s, want %s", file, credentialFile)
-	assertPaths(t, "ExternalSecret cluster-repository", secret, map[string]any{
+	file, secret := testutil.OnlyDoc(t, docs, "ExternalSecret", "cluster-repository")
+	testutil.FailIf(t, path.Join(testutil.BootDir, file) != credentialFile, "the repository credential boots from %s, want %s", file, credentialFile)
+	testutil.AssertPaths(t, "ExternalSecret cluster-repository", secret, map[string]any{
 		"metadata.namespace":                 "argocd",
 		"spec.target.name":                   "cluster-repository",
-		"spec.target.template.data.url":      fixtureRepoURL,
+		"spec.target.template.data.url":      testutil.FixtureRepoURL,
 		"spec.target.template.data.username": "x-access-token",
 		"spec.target.template.data.password": "{{ .token }}",
 	})
-	failIf(t, dig(secret, "spec", "target", "template", "metadata", "labels", "argocd.argoproj.io/secret-type") != "repository", "the Secret carries no Argo CD repository label")
-	from, _ := dig(secret, "spec", "dataFrom").([]any)
-	fatalIf(t, len(from) != 1, "spec.dataFrom has %d entries, want the GitHub generator alone", len(from))
-	failIf(t, dig(from[0], "sourceRef", "generatorRef", "kind") != "GithubAccessToken", "the token comes from %v, want External Secrets' GitHub generator", dig(from[0], "sourceRef", "generatorRef", "kind"))
+	testutil.FailIf(t, testutil.Dig(secret, "spec", "target", "template", "metadata", "labels", "argocd.argoproj.io/secret-type") != "repository", "the Secret carries no Argo CD repository label")
+	from, _ := testutil.Dig(secret, "spec", "dataFrom").([]any)
+	testutil.FatalIf(t, len(from) != 1, "spec.dataFrom has %d entries, want the GitHub generator alone", len(from))
+	testutil.FailIf(t, testutil.Dig(from[0], "sourceRef", "generatorRef", "kind") != "GithubAccessToken", "the token comes from %v, want External Secrets' GitHub generator", testutil.Dig(from[0], "sourceRef", "generatorRef", "kind"))
 
-	_, generator := onlyDoc(t, docs, "GithubAccessToken", fmt.Sprint(dig(from[0], "sourceRef", "generatorRef", "name")))
-	assertPaths(t, "the GitHub generator", generator, map[string]any{
+	_, generator := testutil.OnlyDoc(t, docs, "GithubAccessToken", fmt.Sprint(testutil.Dig(from[0], "sourceRef", "generatorRef", "name")))
+	testutil.AssertPaths(t, "the GitHub generator", generator, map[string]any{
 		"metadata.namespace":                 "argocd",
-		"spec.appID":                         fixtureGitHubAppID,
-		"spec.installID":                     fixtureInstallationID,
+		"spec.appID":                         testutil.FixtureGitHubAppID,
+		"spec.installID":                     testutil.FixtureInstallationID,
 		"spec.auth.privateKey.secretRef.key": "private-key",
 	})
-	failIf(t, !slices.Equal(stringsOf(t, "spec.repositories", dig(generator, "spec", "repositories")), []string{fixtureRepoName}), "the token reads %v, want only %s", dig(generator, "spec", "repositories"), fixtureRepoName)
+	testutil.FailIf(t, !slices.Equal(stringsOf(t, "spec.repositories", testutil.Dig(generator, "spec", "repositories")), []string{testutil.FixtureRepoName}), "the token reads %v, want only %s", testutil.Dig(generator, "spec", "repositories"), testutil.FixtureRepoName)
 
-	_, key := onlyDoc(t, docs, "ExternalSecret", fmt.Sprint(dig(generator, "spec", "auth", "privateKey", "secretRef", "name")))
-	data, _ := dig(key, "spec", "data").([]any)
-	fatalIf(t, len(data) != 1, "the App key's ExternalSecret copies %d values, want one", len(data))
-	assertPaths(t, "the App key's source", data[0].(map[string]any), map[string]any{"secretKey": "private-key", "remoteRef.key": "argocd/github-app", "remoteRef.property": "private-key"})
-	_, store := onlyDoc(t, docs, "SecretStore", fmt.Sprint(dig(key, "spec", "secretStoreRef", "name")))
-	assertPaths(t, "the OpenBao store", store, map[string]any{
+	_, key := testutil.OnlyDoc(t, docs, "ExternalSecret", fmt.Sprint(testutil.Dig(generator, "spec", "auth", "privateKey", "secretRef", "name")))
+	data, _ := testutil.Dig(key, "spec", "data").([]any)
+	testutil.FatalIf(t, len(data) != 1, "the App key's ExternalSecret copies %d values, want one", len(data))
+	testutil.AssertPaths(t, "the App key's source", data[0].(map[string]any), map[string]any{"secretKey": "private-key", "remoteRef.key": "argocd/github-app", "remoteRef.property": "private-key"})
+	_, store := testutil.OnlyDoc(t, docs, "SecretStore", fmt.Sprint(testutil.Dig(key, "spec", "secretStoreRef", "name")))
+	testutil.AssertPaths(t, "the OpenBao store", store, map[string]any{
 		"metadata.namespace":                            "argocd",
 		"spec.provider.vault.server":                    "https://openbao.openbao.svc:8200",
 		"spec.provider.vault.caProvider.type":           "ConfigMap",
@@ -282,78 +209,78 @@ func TestRenderUserData_HostsPlatformTakesArgoCDsRepositoryCredentialFromAGitHub
 
 func TestRenderUserData_HostsPlatformServesOpenBaoOverTLSAloneFromACertificateTheClusterAuthorityRenews(t *testing.T) {
 	_, cc := renderCC(t, hostsPlatformRenderInputs())
-	docs := bootDocs(t, cc)
+	docs := testutil.BootDocs(t, cc)
 
-	_, chart := onlyDoc(t, docs, "HelmChart", "openbao")
+	_, chart := testutil.OnlyDoc(t, docs, "HelmChart", "openbao")
 	values := chartValuesOf(t, "openbao", chart)
-	config := fmt.Sprint(dig(values, "server", "standalone", "config"))
-	file, serving := onlyDoc(t, docs, "Certificate", "openbao-tls")
-	_, authority := onlyDoc(t, docs, "Certificate", "openbao-ca")
-	_, issuer := onlyDoc(t, docs, "Issuer", "openbao-ca")
-	_, bundle := onlyDoc(t, docs, "Bundle", "openbao-ca")
+	config := fmt.Sprint(testutil.Dig(values, "server", "standalone", "config"))
+	file, serving := testutil.OnlyDoc(t, docs, "Certificate", "openbao-tls")
+	_, authority := testutil.OnlyDoc(t, docs, "Certificate", "openbao-ca")
+	_, issuer := testutil.OnlyDoc(t, docs, "Issuer", "openbao-ca")
+	_, bundle := testutil.OnlyDoc(t, docs, "Bundle", "openbao-ca")
 
 	block := listenerBlockRe.FindStringSubmatch(config)
-	fatalIf(t, block == nil, "OpenBao's configuration holds no tcp listener:\n%s", config)
+	testutil.FatalIf(t, block == nil, "OpenBao's configuration holds no tcp listener:\n%s", config)
 	listener := map[string]string{}
 	for _, line := range strings.Split(strings.TrimSpace(block[1]), "\n") {
 		key, value, _ := strings.Cut(line, "=")
 		listener[strings.TrimSpace(key)] = strings.Trim(strings.TrimSpace(value), `"`)
 	}
-	failIf(t, !reflect.DeepEqual(listener, map[string]string{"address": "[::]:8200", "cluster_address": "[::]:8201",
+	testutil.FailIf(t, !reflect.DeepEqual(listener, map[string]string{"address": "[::]:8200", "cluster_address": "[::]:8201",
 		"tls_cert_file": "/openbao/tls/tls.crt", "tls_key_file": "/openbao/tls/tls.key", "tls_min_version": "tls13"}),
 		"OpenBao's tcp listener sets %v, want TLS 1.3 alone on 8200 from the certificate and key in /openbao/tls", listener)
-	failIf(t, !strings.Contains(fmt.Sprint(dig(values, "server", "volumes")), "secretName:openbao-tls"), "OpenBao mounts %v, want the Secret openbao-tls the certificate is kept in", dig(values, "server", "volumes"))
-	failIf(t, file >= "03-cluster-repository.yaml", "the certificate boots from %s, after the store that reads OpenBao over TLS", file)
-	assertPaths(t, "the serving certificate", serving, map[string]any{
+	testutil.FailIf(t, !strings.Contains(fmt.Sprint(testutil.Dig(values, "server", "volumes")), "secretName:openbao-tls"), "OpenBao mounts %v, want the Secret openbao-tls the certificate is kept in", testutil.Dig(values, "server", "volumes"))
+	testutil.FailIf(t, file >= "03-cluster-repository.yaml", "the certificate boots from %s, after the store that reads OpenBao over TLS", file)
+	testutil.AssertPaths(t, "the serving certificate", serving, map[string]any{
 		"metadata.namespace":  "openbao",
 		"spec.secretName":     "openbao-tls",
 		"spec.issuerRef.kind": "Issuer",
-		"spec.issuerRef.name": dig(issuer, "metadata", "name"),
+		"spec.issuerRef.name": testutil.Dig(issuer, "metadata", "name"),
 	})
-	failIf(t, !slices.Contains(stringsOf(t, "spec.dnsNames", dig(serving, "spec", "dnsNames")), "openbao.openbao.svc"), "the certificate names %v, want openbao.openbao.svc", dig(serving, "spec", "dnsNames"))
-	lifetime, err := time.ParseDuration(fmt.Sprint(dig(serving, "spec", "duration")))
-	fatalIf(t, err != nil, "the certificate's duration: %v", err)
-	before, err := time.ParseDuration(fmt.Sprint(dig(serving, "spec", "renewBefore")))
-	failIf(t, err != nil || before <= 0 || before >= lifetime, "the certificate renews %v before its %v lifetime ends, want a renewal inside it", dig(serving, "spec", "renewBefore"), lifetime)
-	assertPaths(t, "the authority", authority, map[string]any{
+	testutil.FailIf(t, !slices.Contains(stringsOf(t, "spec.dnsNames", testutil.Dig(serving, "spec", "dnsNames")), "openbao.openbao.svc"), "the certificate names %v, want openbao.openbao.svc", testutil.Dig(serving, "spec", "dnsNames"))
+	lifetime, err := time.ParseDuration(fmt.Sprint(testutil.Dig(serving, "spec", "duration")))
+	testutil.FatalIf(t, err != nil, "the certificate's duration: %v", err)
+	before, err := time.ParseDuration(fmt.Sprint(testutil.Dig(serving, "spec", "renewBefore")))
+	testutil.FailIf(t, err != nil || before <= 0 || before >= lifetime, "the certificate renews %v before its %v lifetime ends, want a renewal inside it", testutil.Dig(serving, "spec", "renewBefore"), lifetime)
+	testutil.AssertPaths(t, "the authority", authority, map[string]any{
 		"metadata.namespace":             "openbao",
 		"spec.isCA":                      true,
 		"spec.privateKey.rotationPolicy": "Never",
-		"spec.secretName":                dig(issuer, "spec", "ca", "secretName"),
+		"spec.secretName":                testutil.Dig(issuer, "spec", "ca", "secretName"),
 		"spec.issuerRef.kind":            "Issuer",
 	})
-	failIf(t, dig(issuer, "metadata", "namespace") != "openbao", "the authority signs from namespace %v, want openbao alone", dig(issuer, "metadata", "namespace"))
-	sources, _ := dig(bundle, "spec", "sources").([]any)
-	fatalIf(t, len(sources) != 1, "the Bundle copies %d sources, want the authority alone", len(sources))
-	failIf(t, dig(sources[0], "secret", "name") != dig(authority, "spec", "secretName") || dig(bundle, "spec", "target", "configMap", "key") != "ca.crt",
-		"the Bundle copies %v into %v, want the authority's Secret into the ConfigMap key ca.crt", sources[0], dig(bundle, "spec", "target"))
-	reload, _ := dig(values, "server", "extraContainers").([]any)
-	failIf(t, dig(values, "server", "shareProcessNamespace") != true || len(reload) != 1 || !strings.Contains(fmt.Sprint(dig(reload[0], "volumeMounts")), "mountPath:/openbao/tls"),
-		"OpenBao's pod runs %v with shareProcessNamespace %v, want one container that reads the renewed certificate and signals OpenBao", reload, dig(values, "server", "shareProcessNamespace"))
+	testutil.FailIf(t, testutil.Dig(issuer, "metadata", "namespace") != "openbao", "the authority signs from namespace %v, want openbao alone", testutil.Dig(issuer, "metadata", "namespace"))
+	sources, _ := testutil.Dig(bundle, "spec", "sources").([]any)
+	testutil.FatalIf(t, len(sources) != 1, "the Bundle copies %d sources, want the authority alone", len(sources))
+	testutil.FailIf(t, testutil.Dig(sources[0], "secret", "name") != testutil.Dig(authority, "spec", "secretName") || testutil.Dig(bundle, "spec", "target", "configMap", "key") != "ca.crt",
+		"the Bundle copies %v into %v, want the authority's Secret into the ConfigMap key ca.crt", sources[0], testutil.Dig(bundle, "spec", "target"))
+	reload, _ := testutil.Dig(values, "server", "extraContainers").([]any)
+	testutil.FailIf(t, testutil.Dig(values, "server", "shareProcessNamespace") != true || len(reload) != 1 || !strings.Contains(fmt.Sprint(testutil.Dig(reload[0], "volumeMounts")), "mountPath:/openbao/tls"),
+		"OpenBao's pod runs %v with shareProcessNamespace %v, want one container that reads the renewed certificate and signals OpenBao", reload, testutil.Dig(values, "server", "shareProcessNamespace"))
 }
 
 func TestRenderUserData_HostsPlatformBootsTheCertManagerEveryClusterRuns(t *testing.T) {
 	_, cc := renderCC(t, hostsPlatformRenderInputs())
 
-	_, chart := onlyDoc(t, bootDocs(t, cc), "HelmChart", "cert-manager")
+	_, chart := testutil.OnlyDoc(t, testutil.BootDocs(t, cc), "HelmChart", "cert-manager")
 
 	version := PinnedVersions.CertManagerChartVersion
-	failIf(t, dig(chart, "spec", "version") != version, "the booted cert-manager is %v, want %s, the version every cluster runs", dig(chart, "spec", "version"), version)
-	failIf(t, dig(chartValuesOf(t, "cert-manager", chart), "acmesolver", "image", "digest") != acmesolverDigests[version],
-		"the booted cert-manager runs the HTTP-01 solver by %v, want %s, the one digest the admission policy admits", dig(chartValuesOf(t, "cert-manager", chart), "acmesolver", "image", "digest"), acmesolverDigests[version])
+	testutil.FailIf(t, testutil.Dig(chart, "spec", "version") != version, "the booted cert-manager is %v, want %s, the version every cluster runs", testutil.Dig(chart, "spec", "version"), version)
+	testutil.FailIf(t, testutil.Dig(chartValuesOf(t, "cert-manager", chart), "acmesolver", "image", "digest") != acmesolverDigests[version],
+		"the booted cert-manager runs the HTTP-01 solver by %v, want %s, the one digest the admission policy admits", testutil.Dig(chartValuesOf(t, "cert-manager", chart), "acmesolver", "image", "digest"), acmesolverDigests[version])
 }
 
 // mountsOpenBaoCA reports whether pod's one container reads the ConfigMap openbao-ca read-only at wantOpenBaoCADir.
 func mountsOpenBaoCA(pod any) bool {
-	volumes, _ := dig(pod, "spec", "volumes").([]any)
-	containers, _ := dig(pod, "spec", "containers").([]any)
+	volumes, _ := testutil.Dig(pod, "spec", "volumes").([]any)
+	containers, _ := testutil.Dig(pod, "spec", "containers").([]any)
 	if len(containers) != 1 {
 		return false
 	}
-	mounts, _ := dig(containers[0], "volumeMounts").([]any)
+	mounts, _ := testutil.Dig(containers[0], "volumeMounts").([]any)
 	for _, v := range volumes {
 		for _, m := range mounts {
-			if dig(v, "configMap", "name") == "openbao-ca" && dig(m, "name") == dig(v, "name") && dig(m, "mountPath") == wantOpenBaoCADir && dig(m, "readOnly") == true {
+			if testutil.Dig(v, "configMap", "name") == "openbao-ca" && testutil.Dig(m, "name") == testutil.Dig(v, "name") && testutil.Dig(m, "mountPath") == wantOpenBaoCADir && testutil.Dig(m, "readOnly") == true {
 				return true
 			}
 		}
@@ -364,11 +291,11 @@ func mountsOpenBaoCA(pod any) bool {
 func TestRenderUserData_HostsPlatformWritesTheSealKeyToOneRootOnlyFile(t *testing.T) {
 	ud, cc := renderCC(t, hostsPlatformRenderInputs())
 
-	f := cc.file(t, sealKeyFile)
+	f := cc.File(t, testutil.SealKeyFile)
 
-	failIf(t, f.Owner != "root:root" || f.Permissions != "0600", "%s is %s %s, want root:root 0600", f.Path, f.Owner, f.Permissions)
-	failIf(t, sealKeyOf(t, cc) != fixtureSealKey, "%s holds another key than the one rendered", f.Path)
-	failIf(t, strings.Count(ud, fixtureSealKey) != 1, "the seal key appears %d times in the user data, want only in %s", strings.Count(ud, fixtureSealKey), sealKeyFile)
+	testutil.FailIf(t, f.Owner != "root:root" || f.Permissions != "0600", "%s is %s %s, want root:root 0600", f.Path, f.Owner, f.Permissions)
+	testutil.FailIf(t, testutil.SealKeyOf(t, cc) != testutil.FixtureSealKey, "%s holds another key than the one rendered", f.Path)
+	testutil.FailIf(t, strings.Count(ud, testutil.FixtureSealKey) != 1, "the seal key appears %d times in the user data, want only in %s", strings.Count(ud, testutil.FixtureSealKey), testutil.SealKeyFile)
 }
 
 func TestRenderUserData_HostsPlatformRefusesAnInputOutOfShape(t *testing.T) {
@@ -376,7 +303,7 @@ func TestRenderUserData_HostsPlatformRefusesAnInputOutOfShape(t *testing.T) {
 		name   string
 		mutate func(*HostsPlatformInputs)
 	}{
-		{"a seal key that is not 64 hex characters", func(h *HostsPlatformInputs) { h.SealKey = fixtureSealKey[:63] }},
+		{"a seal key that is not 64 hex characters", func(h *HostsPlatformInputs) { h.SealKey = testutil.FixtureSealKey[:63] }},
 		{"an App id that is not digits", func(h *HostsPlatformInputs) { h.AppID = "12a" }},
 		{"an empty installation id", func(h *HostsPlatformInputs) { h.InstallationID = "" }},
 		{"a public address that is not dotted IPv4", func(h *HostsPlatformInputs) { h.PublicIPv4 = "203.0.113.010" }},
@@ -387,7 +314,68 @@ func TestRenderUserData_HostsPlatformRefusesAnInputOutOfShape(t *testing.T) {
 
 			_, err := RenderUserData(in)
 
-			failIf(t, err == nil, "RenderUserData accepted %s", c.name)
+			testutil.FailIf(t, err == nil, "RenderUserData accepted %s", c.name)
 		})
 	}
 }
+
+func TestSeed_HostsPlatformAdoptsTheBootedChartsAndLeavesArgoCDsCredentialToExternalSecrets(t *testing.T) {
+	in := hostsPlatformRenderInputs()
+	seed, err := RenderSeed(in.Versions, in.HostsPlatform.PublicIPv4, in.ClusterRepoURL)
+	testutil.FatalIf(t, err != nil, "RenderSeed: %v", err)
+
+	err = HostsPlatformSeed(seed, in.HostsPlatform.PublicIPv4)
+
+	testutil.FatalIf(t, err != nil, "HostsPlatformSeed: %v", err)
+	_, cc := renderCC(t, in)
+	boot := testutil.BootDocs(t, cc)
+
+	for _, component := range slices.Sorted(maps.Keys(wantBootTrees)) {
+		t.Run(component, func(t *testing.T) {
+			content, ok := seed["cluster/"+component+".yaml"]
+			testutil.FatalIf(t, !ok, "the seed holds no cluster/%s.yaml", component)
+			_, chart := testutil.OnlyDoc(t, boot, "HelmChart", component)
+			testutil.AssertPaths(t, "the "+component+" Application", testutil.YamlMap(t, component, content), map[string]any{
+				"spec.source.chart":          testutil.Dig(chart, "spec", "chart"),
+				"spec.source.repoURL":        testutil.Dig(chart, "spec", "repo"),
+				"spec.source.targetRevision": testutil.Dig(chart, "spec", "version"),
+				"spec.source.helm.values":    testutil.Dig(chart, "spec", "valuesContent"),
+				"spec.destination.namespace": testutil.Dig(chart, "spec", "targetNamespace"),
+			})
+		})
+	}
+	tls := testutil.TestRepoFile(t, "clusterbases/openbao/tls.yaml")
+	testutil.FailIf(t, !reflect.DeepEqual(testutil.YamlDocs(t, seedOpenBaoTLSPath, seed[seedOpenBaoTLSPath]), testutil.YamlDocs(t, "clusterbases/openbao/tls.yaml", tls)),
+		"the seed's %s is not cluster-bases' openbao/tls.yaml, so Argo CD would not own the authority k3s booted", seedOpenBaoTLSPath)
+	var env []string
+	var reachesOpenBao bool
+	for _, d := range testutil.YamlDocs(t, "cluster/node-agent.yaml", seed["cluster/node-agent.yaml"]) {
+		if d["kind"] == "CiliumNetworkPolicy" {
+			egress, _ := testutil.Dig(d, "spec", "egress").([]any)
+			for _, rule := range egress {
+				to, _ := testutil.Dig(rule, "toEndpoints").([]any)
+				ports := fmt.Sprint(testutil.Dig(rule, "toPorts"))
+				reachesOpenBao = reachesOpenBao || len(to) == 1 && testutil.Dig(to[0], "matchLabels", "k8s:io.kubernetes.pod.namespace") == "openbao" && strings.Contains(ports, "8200")
+			}
+		}
+		if testutil.Dig(d, "metadata", "name") != "mitstack-repo-token" {
+			continue
+		}
+		switch d["kind"] {
+		case "CronJob":
+			containers, _ := testutil.Dig(d, "spec", "jobTemplate", "spec", "template", "spec", "containers").([]any)
+			vars, _ := testutil.Dig(containers[0], "env").([]any)
+			for _, v := range vars {
+				env = append(env, fmt.Sprintf("%v=%v", testutil.Dig(v, "name"), testutil.Dig(v, "value")))
+			}
+		case "Role":
+			testutil.FailIf(t, strings.Contains(fmt.Sprint(d["rules"]), "cluster-repository"), "the refresh's Role still grants a patch of cluster-repository: %v", d["rules"])
+		}
+	}
+	testutil.FailIf(t, !slices.Contains(env, patchClusterRepositoryEnv+"=false"), "the refresh runs with %v, want %s=false", env, patchClusterRepositoryEnv)
+	testutil.FailIf(t, !reachesOpenBao, "mitstack-node's egress policy admits no traffic to OpenBao on 8200, so the boot Job and the App key's writer would be cut off once Argo CD syncs it")
+}
+
+const (
+	seedOpenBaoTLSPath = "cluster/openbao-tls.yaml"
+)

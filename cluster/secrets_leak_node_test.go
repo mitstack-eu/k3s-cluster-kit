@@ -10,85 +10,86 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mitstack-eu/k3s-cluster-kit/testutil"
 	"github.com/mitstack-eu/operator-kit/v2/kittest"
 )
 
 var nodeSecrets = []string{
-	fixtureEnrolmentToken,
-	fixtureReportToken,
-	fixtureRepositoryToken,
-	fixtureNotificationToken,
+	testutil.FixtureEnrolmentToken,
+	testutil.FixtureReportToken,
+	testutil.FixtureRepositoryToken,
+	testutil.FixtureNotificationToken,
 	refreshedRepositoryToken,
 	staleRepositoryToken,
 }
 
-func assertQuietRun(t *testing.T, who string, run enrolRun, rec *argvRecorder, reqs []recordedEnrolRequest) {
+func assertQuietRun(t *testing.T, who string, run testutil.EnrolRun, rec *argvRecorder, reqs []testutil.RecordedEnrolRequest) {
 	t.Helper()
-	fatalIf(t, len(reqs) == 0, "%s sent no request to its endpoint, so what it printed proves nothing:\n%s", who, run.output())
+	testutil.FatalIf(t, len(reqs) == 0, "%s sent no request to its endpoint, so what it printed proves nothing:\n%s", who, run.Output())
 	lines := rec.commandLines(t)
-	fatalIf(t, !strings.Contains(lines, "curl "), "the recorder saw no curl command line from %s, so it saw nothing the script ran:\n%s", who, lines)
+	testutil.FatalIf(t, !strings.Contains(lines, "curl "), "the recorder saw no curl command line from %s, so it saw nothing the script ran:\n%s", who, lines)
 
-	kittest.AssertNoSecret(t, who+"'s stdout", run.stdout, nodeSecrets...)
-	kittest.AssertNoSecret(t, who+"'s stderr", run.stderr, nodeSecrets...)
+	kittest.AssertNoSecret(t, who+"'s stdout", run.Stdout, nodeSecrets...)
+	kittest.AssertNoSecret(t, who+"'s stderr", run.Stderr, nodeSecrets...)
 	kittest.AssertNoSecret(t, "a command line "+who+" ran", lines, nodeSecrets...)
 	for _, req := range reqs {
-		failIf(t, !req.SawClient, "%s: no process command line carried its endpoint URL while its request was open; want the scan to have seen the client", who)
+		testutil.FailIf(t, !req.SawClient, "%s: no process command line carried its endpoint URL while its request was open; want the scan to have seen the client", who)
 		for _, line := range req.TokenOnCmdline {
 			t.Errorf("%s: a process command line carried the bearer token it presents while its request was open: %s", who, line)
 		}
 	}
-	assertNothingLeftHolding(t, who, run.tmp, nodeSecrets)
+	assertNothingLeftHolding(t, who, run.Tmp, nodeSecrets)
 }
 
 func TestNoSecretLeak_NodeTokensThroughEnrolmentRefusalRefreshAndReport(t *testing.T) {
 	_, err := os.ReadFile("/proc/self/cmdline")
-	fatalIf(t, err != nil, "reading /proc/self/cmdline error = %v; want it readable, since this check scans process command lines", err)
+	testutil.FatalIf(t, err != nil, "reading /proc/self/cmdline error = %v; want it readable, since this check scans process command lines", err)
 	ud, cc := renderFixture(t)
 	kittest.AssertNoSecret(t, "the user data, apart from the enrolment token in enrolment.env",
-		strings.ReplaceAll(cc.allText(ud), fixtureEnrolmentToken, ""), nodeSecrets...)
-	enrolScript := cc.enrolScript(t).Content
-	env := cc.file(t, "/etc/mitstack/"+enrolScriptEnvFile).Content
+		strings.ReplaceAll(cc.AllText(ud), testutil.FixtureEnrolmentToken, ""), nodeSecrets...)
+	enrolScript := cc.EnrolScript(t).Content
+	env := cc.File(t, "/etc/mitstack/"+testutil.EnrolScriptEnvFile).Content
 
-	refused := newFakeEnrolment(t, fixtureEnrolmentToken, http.StatusFailedDependency)
-	refused.answerStatusWith(http.StatusFailedDependency, `{"error":"`+githubRefusal+`"}`)
+	refused := testutil.NewFakeEnrolment(t, testutil.FixtureEnrolmentToken, http.StatusFailedDependency)
+	refused.AnswerStatusWith(http.StatusFailedDependency, `{"error":"`+githubRefusal+`"}`)
 	rec := newArgvRecorder(t)
-	run := runEnrolScript(t, enrolScript, env, refused.endpoint(), refused.caFile, enrolRefusalBound, withPATH(rec.path()))
+	run := runEnrolScript(t, enrolScript, env, refused.Endpoint(), refused.CAFile, enrolRefusalBound, withPATH(rec.path()))
 
 	assertExitedNonZero(t, "a 424", run)
-	assertQuietRun(t, "the refused enrol script", run, rec, refused.received())
+	assertQuietRun(t, "the refused enrol script", run, rec, refused.Received())
 
 	// Its directories are reused by the refresh and report steps below.
-	enrolled := newFakeEnrolment(t, fixtureEnrolmentToken, http.StatusOK)
-	enrolled.answerOKWith(tokenAnswer(t, fixtureRepositoryToken, fixtureReportToken))
+	enrolled := testutil.NewFakeEnrolment(t, testutil.FixtureEnrolmentToken, http.StatusOK)
+	enrolled.AnswerOKWith(testutil.TokenAnswer(t, testutil.FixtureRepositoryToken, testutil.FixtureReportToken))
 	rec = newArgvRecorder(t)
-	run = runEnrolScript(t, enrolScript, env, enrolled.endpoint(), enrolled.caFile, enrolRefusalBound, withPATH(rec.path()))
+	run = runEnrolScript(t, enrolScript, env, enrolled.Endpoint(), enrolled.CAFile, enrolRefusalBound, withPATH(rec.path()))
 
-	fatalIf(t, run.err != nil, "the enrol script on a 200 error = %v; want nil\n%s", run.err, run.output())
-	assertQuietRun(t, "the enrol script", run, rec, enrolled.received())
-	_, err = os.Stat(filepath.Join(run.manifests, notificationSecretFile))
-	fatalIf(t, err != nil, "stat %s after the enrol script on a 200 error = %v; want the notification token written to the node's files", notificationSecretFile, err)
-	enrolmentDir := run.dir
+	testutil.FatalIf(t, run.Err != nil, "the enrol script on a 200 error = %v; want nil\n%s", run.Err, run.Output())
+	assertQuietRun(t, "the enrol script", run, rec, enrolled.Received())
+	_, err = os.Stat(filepath.Join(run.Manifests, notificationSecretFile))
+	testutil.FatalIf(t, err != nil, "stat %s after the enrol script on a 200 error = %v; want the notification token written to the node's files", notificationSecretFile, err)
+	enrolmentDir := run.Dir
 
-	refresh := runRefresh(t, fixtureReportToken, []int{http.StatusOK}, "")
-	fatalIf(t, refresh.run.err != nil, "the refresh on a 200 error = %v; want nil\n%s", refresh.run.err, refresh.run.output())
-	assertQuietRun(t, "the refresh", refresh.run, refresh.rec, refresh.srv.received())
-	failed := runRefresh(t, fixtureReportToken, []int{http.StatusServiceUnavailable}, "")
+	refresh := runRefresh(t, testutil.FixtureReportToken, []int{http.StatusOK}, "")
+	testutil.FatalIf(t, refresh.run.Err != nil, "the refresh on a 200 error = %v; want nil\n%s", refresh.run.Err, refresh.run.Output())
+	assertQuietRun(t, "the refresh", refresh.run, refresh.rec, refresh.srv.Received())
+	failed := runRefresh(t, testutil.FixtureReportToken, []int{http.StatusServiceUnavailable}, "")
 	assertExitedNonZero(t, "a 503", failed.run)
-	assertQuietRun(t, "the failed refresh", failed.run, failed.rec, failed.srv.received())
+	assertQuietRun(t, "the failed refresh", failed.run, failed.rec, failed.srv.Received())
 
-	report := newFakeEnrolment(t, fixtureReportToken, http.StatusOK)
+	report := testutil.NewFakeEnrolment(t, testutil.FixtureReportToken, http.StatusOK)
 	rec = newArgvRecorder(t)
 	argocd := newFakeArgoCDCurl(t, cannedArgoCDAnswers())
-	run = runReportScript(t, enrolmentDir, fixtureReportToken, report.URL+reportEndpointPath, report.caFile,
+	run = runReportScript(t, enrolmentDir, testutil.FixtureReportToken, report.URL+testutil.ReportEndpointPath, report.CAFile,
 		newFakeJournal(t, cannedJournal).path, withPATH(argocd.dir+string(os.PathListSeparator)+rec.path()))
 
-	fatalIf(t, run.err != nil, "the report script on a 200 error = %v; want nil\n%s", run.err, run.output())
-	reqs := report.received()
+	testutil.FatalIf(t, run.Err != nil, "the report script on a 200 error = %v; want nil\n%s", run.Err, run.Output())
+	reqs := report.Received()
 	assertQuietRun(t, "the report script", run, rec, reqs)
 	for _, req := range reqs {
 		kittest.AssertNoSecret(t, "the report body", string(req.Body), nodeSecrets...)
 	}
-	want := map[string]any{"repositoryToken": redactedValue, "repositoryTokenExpiresAt": redactedValue, "reportToken": redactedValue, "notificationToken": redactedValue}
+	want := map[string]any{"repositoryToken": testutil.RedactedValue, "repositoryTokenExpiresAt": testutil.RedactedValue, "reportToken": testutil.RedactedValue, "notificationToken": testutil.RedactedValue}
 	got := decodeAny(t, "enrolment", reportFields(t, reqs[len(reqs)-1])["enrolment"])
-	failIf(t, !reflect.DeepEqual(got, want), "the report's enrolment = %v; want %v", got, want)
+	testutil.FailIf(t, !reflect.DeepEqual(got, want), "the report's enrolment = %v; want %v", got, want)
 }

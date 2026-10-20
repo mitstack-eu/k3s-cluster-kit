@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mitstack-eu/k3s-cluster-kit/testutil"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -17,13 +18,13 @@ const hetznerPrivateNetworks = "- ip: 10.255.0.2\n  alias_ips: [10.255.0.9]\n  i
 
 func TestNodeScript_Contract(t *testing.T) {
 	_, cc := renderFixture(t)
-	assertNamesAll(t, "the node script", cc.nodeScript(t).Content, "http://169.254.169.254/hetzner/v1/metadata",
+	testutil.AssertNamesAll(t, "the node script", cc.NodeScript(t).Content, "http://169.254.169.254/hetzner/v1/metadata",
 		"/etc/rancher/k3s/config.yaml.d", dropInFile, nodeScriptMetadataEnv, nodeScriptDropInEnv)
 }
 
 func TestNodeScript_AgainstTheMetadataService(t *testing.T) {
 	_, cc := renderFixture(t)
-	script := cc.nodeScript(t).Content
+	script := cc.NodeScript(t).Content
 	dropIn := func(id, ip string) map[string]any {
 		return map[string]any{"node-ip": ip, "advertise-address": ip, "bind-address": ip, "kubelet-arg+": []any{"provider-id=hcloud://" + id}}
 	}
@@ -55,19 +56,43 @@ func TestNodeScript_AgainstTheMetadataService(t *testing.T) {
 			raw, readErr := os.ReadFile(filepath.Join(dir, dropInFile))
 			if tc.want == nil {
 				var exit *exec.ExitError
-				fatalIf(t, !errors.As(run.err, &exit), "the node script with server id %q and networks %q error = %v; want a non-zero exit\n%s", tc.id, tc.networks, run.err, run.output())
-				failIf(t, readErr == nil, "the node script with server id %q and networks %q wrote %s despite failing; want no file", tc.id, tc.networks, dropInFile)
+				testutil.FatalIf(t, !errors.As(run.Err, &exit), "the node script with server id %q and networks %q error = %v; want a non-zero exit\n%s", tc.id, tc.networks, run.Err, run.Output())
+				testutil.FailIf(t, readErr == nil, "the node script with server id %q and networks %q wrote %s despite failing; want no file", tc.id, tc.networks, dropInFile)
 				return
 			}
-			fatalIf(t, run.err != nil || readErr != nil, "the node script with server id %q and networks %q failed (run %v, read %v); want success\n%s", tc.id, tc.networks, run.err, readErr, run.output())
+			testutil.FatalIf(t, run.Err != nil || readErr != nil, "the node script with server id %q and networks %q failed (run %v, read %v); want success\n%s", tc.id, tc.networks, run.Err, readErr, run.Output())
 			var got map[string]any
 			err := yaml.Unmarshal(raw, &got)
-			fatalIf(t, err != nil, "%s is not valid YAML: %v\n%s", dropInFile, err, raw)
-			failIf(t, !reflect.DeepEqual(got, tc.want), "%s = %#v; want %#v", dropInFile, got, tc.want)
-			for _, endpoint := range mapKeys(tc.minHits) {
+			testutil.FatalIf(t, err != nil, "%s is not valid YAML: %v\n%s", dropInFile, err, raw)
+			testutil.FailIf(t, !reflect.DeepEqual(got, tc.want), "%s = %#v; want %#v", dropInFile, got, tc.want)
+			for _, endpoint := range testutil.MapKeys(tc.minHits) {
 				n := md.hitCount(metadataPath + "/" + endpoint)
-				failIf(t, n < tc.minHits[endpoint], "%s was read %d times; want at least %d", endpoint, n, tc.minHits[endpoint])
+				testutil.FailIf(t, n < tc.minHits[endpoint], "%s was read %d times; want at least %d", endpoint, n, tc.minHits[endpoint])
 			}
 		})
+	}
+}
+
+func TestNodeScript_LeavesADropInAnInstallWroteAlone(t *testing.T) {
+	_, cc := renderFixture(t)
+	md := newFakeMetadata(t, map[string]metadataAnswer{
+		metadataPath + "/instance-id":      {body: "123456\n"},
+		metadataPath + "/private-networks": {body: hetznerPrivateNetworks},
+	})
+	run := testutil.EnrolRun{Tmp: t.TempDir()}
+	dir := filepath.Join(run.Tmp, "etc", "rancher", "k3s", "config.yaml.d")
+	written := "node-ip: \"10.254.0.2\"\nkubelet-arg+:\n  - \"provider-id=hrobot://321\"\n"
+	testutil.FatalIf(t, os.MkdirAll(dir, 0o700) != nil, "making %s", dir)
+	testutil.FatalIf(t, os.WriteFile(filepath.Join(dir, dropInFile), []byte(written), 0o600) != nil, "seeding %s", dropInFile)
+
+	result := testutil.RunSh(t, "node", cc.NodeScript(t).Content, time.Minute, run,
+		[]string{nodeScriptMetadataEnv + "=" + md.URL + metadataPath, nodeScriptDropInEnv + "=" + dir}, "", nil)
+
+	testutil.FatalIf(t, result.Err != nil, "the node script over an existing drop-in failed: %v\n%s", result.Err, result.Output())
+	raw, err := os.ReadFile(filepath.Join(dir, dropInFile))
+	testutil.FatalIf(t, err != nil, "reading %s: %v", dropInFile, err)
+	testutil.FailIf(t, string(raw) != written, "the node script rewrote the drop-in an install wrote: %q; want it unchanged", raw)
+	for _, endpoint := range []string{"instance-id", "private-networks"} {
+		testutil.FailIf(t, md.hitCount(metadataPath+"/"+endpoint) != 0, "the node script read %s although the drop-in existed; want no metadata read", endpoint)
 	}
 }

@@ -12,46 +12,24 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mitstack-eu/k3s-cluster-kit/testutil"
 )
 
 func fixtureRenderInputs() UserDataInputs {
 	return UserDataInputs{
-		SubscriptionID: fixtureSubID,
-		IssuerURL:      issuerURLFor(fixtureBucket, fixtureSubID),
-		ClusterRepoURL: fixtureRepoURL,
-		EnrolmentToken: fixtureEnrolmentToken,
+		SubscriptionID: testutil.FixtureSubID,
+		IssuerURL:      testutil.IssuerURLFor(testutil.FixtureBucket, testutil.FixtureSubID),
+		ClusterRepoURL: testutil.FixtureRepoURL,
+		EnrolmentToken: testutil.FixtureEnrolmentToken,
 		Versions:       PinnedVersions,
 	}
 }
 
-func renderFixture(t *testing.T) (string, cloudConfig) {
+func renderFixture(t *testing.T) (string, testutil.CloudConfig) {
 	t.Helper()
 	ud := renderOK(t, fixtureRenderInputs())
-	return ud, parseUserData(t, ud)
-}
-
-func assertValues(t *testing.T, what string, got, want map[string]any) {
-	t.Helper()
-	for k, w := range want {
-		if g, ok := got[k]; !ok {
-			t.Errorf("%s: missing %s (want %v)", what, k, w)
-		} else if !reflect.DeepEqual(g, w) {
-			t.Errorf("%s: %s = %#v, want %#v", what, k, g, w)
-		}
-	}
-	for k, g := range got {
-		_, ok := want[k]
-		failIf(t, !ok, "%s: unexpected key %s = %#v", what, k, g)
-	}
-}
-
-func assertPaths(t *testing.T, what string, doc map[string]any, want map[string]any) {
-	t.Helper()
-	got := map[string]any{}
-	for path := range want {
-		got[path] = dig(doc, strings.Split(path, ".")...)
-	}
-	assertValues(t, what, got, want)
+	return ud, testutil.ParseUserData(t, ud)
 }
 
 func TestPinnedVersions_AreTheReviewedPins(t *testing.T) {
@@ -72,21 +50,21 @@ func TestPinnedVersions_AreTheReviewedPins(t *testing.T) {
 	}
 	// kyverno chart 3.9.1 runs Kyverno v1.19.1.
 	setKyvernoVersion(&want, "3.9.1")
-	failIf(t, PinnedVersions != want, "PinnedVersions = %+v\nwant           %+v", PinnedVersions, want)
+	testutil.FailIf(t, PinnedVersions != want, "PinnedVersions = %+v\nwant           %+v", PinnedVersions, want)
 }
 
 func TestRenderUserData_IsADeterministicCloudConfig(t *testing.T) {
 	first, _ := renderFixture(t)
 	second := renderOK(t, fixtureRenderInputs())
-	failIf(t, first != second, "RenderUserData rendered two different documents from the same inputs")
+	testutil.FailIf(t, first != second, "RenderUserData rendered two different documents from the same inputs")
 }
 
 func TestRenderUserData_K3sConfigDisablesFlannelAndNetworkPolicyAndSetsTheIssuer(t *testing.T) {
 	_, cc := renderFixture(t)
-	f := cc.file(t, "/etc/rancher/k3s/config.yaml")
-	failIf(t, f.Permissions != "0600", "/etc/rancher/k3s/config.yaml permissions = %q, want 0600", f.Permissions)
-	issuer := issuerURLFor(fixtureBucket, fixtureSubID)
-	assertValues(t, "k3s config.yaml", yamlMap(t, "k3s config.yaml", f.Content), map[string]any{
+	f := cc.File(t, "/etc/rancher/k3s/config.yaml")
+	testutil.FailIf(t, f.Permissions != "0600", "/etc/rancher/k3s/config.yaml permissions = %q, want 0600", f.Permissions)
+	issuer := testutil.IssuerURLFor(testutil.FixtureBucket, testutil.FixtureSubID)
+	testutil.AssertValues(t, "k3s config.yaml", testutil.YamlMap(t, "k3s config.yaml", f.Content), map[string]any{
 		"cluster-init":           true,
 		"disable":                []any{"local-storage", "traefik"},
 		"flannel-backend":        "none",
@@ -112,19 +90,19 @@ func TestRenderUserData_K3sConfigDisablesFlannelAndNetworkPolicyAndSetsTheIssuer
 
 func TestRenderUserData_CiliumHelmChartCarriesHubbleAndTheBriefsValues(t *testing.T) {
 	_, cc := renderFixture(t)
-	f := cc.file(t, "/var/lib/rancher/k3s/server/manifests/cilium.yaml")
-	chart := yamlMap(t, "cilium.yaml", f.Content)
+	f := cc.File(t, "/var/lib/rancher/k3s/server/manifests/cilium.yaml")
+	chart := testutil.YamlMap(t, "cilium.yaml", f.Content)
 
-	assertPaths(t, "cilium HelmChart", chart, map[string]any{
+	testutil.AssertPaths(t, "cilium HelmChart", chart, map[string]any{
 		"apiVersion": "helm.cattle.io/v1", "kind": "HelmChart", "metadata.name": "cilium", "metadata.namespace": "kube-system",
 		"spec.chart": "cilium", "spec.repo": "https://helm.cilium.io/", "spec.version": "1.19.3", "spec.targetNamespace": "kube-system", "spec.bootstrap": true,
 	})
 
-	valuesContent, ok := dig(chart, "spec", "valuesContent").(string)
-	fatalIf(t, !ok, "cilium HelmChart spec.valuesContent is %T, want a string of YAML", dig(chart, "spec", "valuesContent"))
-	values := yamlMap(t, "cilium valuesContent", valuesContent)
+	valuesContent, ok := testutil.Dig(chart, "spec", "valuesContent").(string)
+	testutil.FatalIf(t, !ok, "cilium HelmChart spec.valuesContent is %T, want a string of YAML", testutil.Dig(chart, "spec", "valuesContent"))
+	values := testutil.YamlMap(t, "cilium valuesContent", valuesContent)
 
-	assertValues(t, "cilium valuesContent", values, map[string]any{
+	testutil.AssertValues(t, "cilium valuesContent", values, map[string]any{
 		"ipam":                 map[string]any{"mode": "kubernetes"},
 		"k8s":                  map[string]any{"requireIPv4PodCIDR": true},
 		"ipv4":                 map[string]any{"enabled": true},
@@ -161,29 +139,29 @@ func assertOneOperatorRollingInPlace(t *testing.T, what string, values map[strin
 		{[]string{"operator", "updateStrategy", "rollingUpdate", "maxSurge"}, 0},
 		{[]string{"operator", "updateStrategy", "rollingUpdate", "maxUnavailable"}, 1},
 	} {
-		got := dig(values, v.path...)
-		failIf(t, !reflect.DeepEqual(got, v.want), "%s: %s = %#v, want %#v: the operator runs on the host network and one node cannot schedule a second hostNetwork operator pod, so a second replica or a surge stays Pending and a rollout never completes",
+		got := testutil.Dig(values, v.path...)
+		testutil.FailIf(t, !reflect.DeepEqual(got, v.want), "%s: %s = %#v, want %#v: the operator runs on the host network and one node cannot schedule a second hostNetwork operator pod, so a second replica or a surge stays Pending and a rollout never completes",
 			what, strings.Join(v.path, "."), got, v.want)
 	}
 }
 
 func TestRenderUserData_CiliumBootstrapRunsOneOperatorThatRollsInPlace(t *testing.T) {
 	_, cc := renderFixture(t)
-	chart := yamlMap(t, "cilium.yaml", cc.file(t, "/var/lib/rancher/k3s/server/manifests/cilium.yaml").Content)
-	valuesContent, ok := dig(chart, "spec", "valuesContent").(string)
-	fatalIf(t, !ok, "cilium HelmChart spec.valuesContent is %T, want a string of YAML", dig(chart, "spec", "valuesContent"))
-	assertOneOperatorRollingInPlace(t, "cilium HelmChart valuesContent", yamlMap(t, "cilium valuesContent", valuesContent))
+	chart := testutil.YamlMap(t, "cilium.yaml", cc.File(t, "/var/lib/rancher/k3s/server/manifests/cilium.yaml").Content)
+	valuesContent, ok := testutil.Dig(chart, "spec", "valuesContent").(string)
+	testutil.FatalIf(t, !ok, "cilium HelmChart spec.valuesContent is %T, want a string of YAML", testutil.Dig(chart, "spec", "valuesContent"))
+	assertOneOperatorRollingInPlace(t, "cilium HelmChart valuesContent", testutil.YamlMap(t, "cilium valuesContent", valuesContent))
 }
 
 func assertNoCredentialKeys(t *testing.T, what string, v any) {
 	t.Helper()
 	switch x := v.(type) {
 	case map[string]any:
-		failIf(t, x["kind"] == "Secret", "%s declares a Secret", what)
+		testutil.FailIf(t, x["kind"] == "Secret", "%s declares a Secret", what)
 		for k, child := range x {
 			lk := strings.ToLower(k)
 			for _, bad := range []string{"password", "token", "privatekey", "secret", "credential", "bearer"} {
-				failIf(t, strings.Contains(lk, bad), "%s carries a credential-shaped key %q", what, k)
+				testutil.FailIf(t, strings.Contains(lk, bad), "%s carries a credential-shaped key %q", what, k)
 			}
 			assertNoCredentialKeys(t, what+"."+k, child)
 		}
@@ -196,9 +174,9 @@ func assertNoCredentialKeys(t *testing.T, what string, v any) {
 
 func TestRenderUserData_ArgoCDBootstrapInstallsTheChartWithNoCredential(t *testing.T) {
 	_, cc := renderFixture(t)
-	f := cc.file(t, "/var/lib/rancher/k3s/server/manifests/00-argocd-bootstrap.yaml")
-	docs := yamlDocs(t, "00-argocd-bootstrap.yaml", f.Content)
-	fatalIf(t, len(docs) != 2, "00-argocd-bootstrap.yaml holds %d documents, want the argocd Namespace and the argocd HelmChart", len(docs))
+	f := cc.File(t, "/var/lib/rancher/k3s/server/manifests/00-argocd-bootstrap.yaml")
+	docs := testutil.YamlDocs(t, "00-argocd-bootstrap.yaml", f.Content)
+	testutil.FatalIf(t, len(docs) != 2, "00-argocd-bootstrap.yaml holds %d documents, want the argocd Namespace and the argocd HelmChart", len(docs))
 
 	var ns, chart map[string]any
 	for _, d := range docs {
@@ -209,16 +187,16 @@ func TestRenderUserData_ArgoCDBootstrapInstallsTheChartWithNoCredential(t *testi
 			chart = d
 		}
 	}
-	failIf(t, ns == nil || dig(ns, "metadata", "name") != "argocd" || ns["apiVersion"] != "v1", "want a v1 Namespace named argocd, got %v", ns)
-	fatalIf(t, chart == nil, "no HelmChart document in 00-argocd-bootstrap.yaml")
-	assertPaths(t, "argocd HelmChart", chart, map[string]any{
+	testutil.FailIf(t, ns == nil || testutil.Dig(ns, "metadata", "name") != "argocd" || ns["apiVersion"] != "v1", "want a v1 Namespace named argocd, got %v", ns)
+	testutil.FatalIf(t, chart == nil, "no HelmChart document in 00-argocd-bootstrap.yaml")
+	testutil.AssertPaths(t, "argocd HelmChart", chart, map[string]any{
 		"apiVersion": "helm.cattle.io/v1", "metadata.name": "argocd", "metadata.namespace": "kube-system", "spec.chart": "argo-cd",
 		"spec.repo": "https://argoproj.github.io/argo-helm", "spec.version": "10.9.7", "spec.targetNamespace": "argocd",
 	})
-	valuesContent, ok := dig(chart, "spec", "valuesContent").(string)
-	fatalIf(t, !ok, "argocd HelmChart spec.valuesContent is %T, want a string of YAML", dig(chart, "spec", "valuesContent"))
-	values := yamlMap(t, "argocd valuesContent", valuesContent)
-	assertValues(t, "argocd valuesContent", values, map[string]any{
+	valuesContent, ok := testutil.Dig(chart, "spec", "valuesContent").(string)
+	testutil.FatalIf(t, !ok, "argocd HelmChart spec.valuesContent is %T, want a string of YAML", testutil.Dig(chart, "spec", "valuesContent"))
+	values := testutil.YamlMap(t, "argocd valuesContent", valuesContent)
+	testutil.AssertValues(t, "argocd valuesContent", values, map[string]any{
 		"dex":           map[string]any{"enabled": false},
 		"notifications": map[string]any{"cm": map[string]any{"create": false}, "secret": map[string]any{"create": false}},
 		"configs":       map[string]any{"cm": map[string]any{argoCDApplicationHealthKey: wantApplicationHealthCheck}},
@@ -243,12 +221,12 @@ func TestRenderUserData_ArgoCDBootstrapInstallsTheChartWithNoCredential(t *testi
 
 func TestRenderUserData_ClusterRootApplicationSyncsTheClusterRepository(t *testing.T) {
 	_, cc := renderFixture(t)
-	f := cc.file(t, "/var/lib/rancher/k3s/server/manifests/10-cluster-root.yaml")
-	app := yamlMap(t, "10-cluster-root.yaml", f.Content)
+	f := cc.File(t, "/var/lib/rancher/k3s/server/manifests/10-cluster-root.yaml")
+	app := testutil.YamlMap(t, "10-cluster-root.yaml", f.Content)
 
-	assertPaths(t, "cluster-root Application", app, map[string]any{
+	testutil.AssertPaths(t, "cluster-root Application", app, map[string]any{
 		"apiVersion": "argoproj.io/v1alpha1", "kind": "Application", "metadata.name": "cluster-root", "metadata.namespace": "argocd", "spec.project": "default",
-		"spec.source":                     map[string]any{"repoURL": fixtureRepoURL, "path": "cluster", "targetRevision": "HEAD"},
+		"spec.source":                     map[string]any{"repoURL": testutil.FixtureRepoURL, "path": "cluster", "targetRevision": "HEAD"},
 		"spec.destination":                map[string]any{"server": "https://kubernetes.default.svc", "namespace": "argocd"},
 		"spec.syncPolicy.automated.prune": true, "spec.syncPolicy.automated.selfHeal": true,
 	})
@@ -257,32 +235,32 @@ func TestRenderUserData_ClusterRootApplicationSyncsTheClusterRepository(t *testi
 
 func TestRenderUserData_EnrolmentEnvCarriesTheTokenSubscriptionAndRepositoryURL(t *testing.T) {
 	_, cc := renderFixture(t)
-	f := cc.file(t, "/etc/mitstack/enrolment.env")
-	failIf(t, f.Permissions != "0600", "/etc/mitstack/enrolment.env permissions = %q, want 0600", f.Permissions)
+	f := cc.File(t, "/etc/mitstack/enrolment.env")
+	testutil.FailIf(t, f.Permissions != "0600", "/etc/mitstack/enrolment.env permissions = %q, want 0600", f.Permissions)
 	want := map[string]string{
-		"MITSTACK_ENROLMENT_TOKEN": fixtureEnrolmentToken,
-		"MITSTACK_SUBSCRIPTION_ID": fixtureSubID,
-		"MITSTACK_REPOSITORY_URL":  fixtureRepoURL,
+		"MITSTACK_ENROLMENT_TOKEN": testutil.FixtureEnrolmentToken,
+		"MITSTACK_SUBSCRIPTION_ID": testutil.FixtureSubID,
+		"MITSTACK_REPOSITORY_URL":  testutil.FixtureRepoURL,
 	}
-	got := enrolmentEnv(t, cc)
-	failIf(t, !maps.Equal(got, want), "enrolment.env = %v, want exactly %v", got, want)
+	got := testutil.EnrolmentEnv(t, cc)
+	testutil.FailIf(t, !maps.Equal(got, want), "enrolment.env = %v, want exactly %v", got, want)
 }
 
-func assertRootScript(t *testing.T, what string, f cloudFile) {
+func assertRootScript(t *testing.T, what string, f testutil.CloudFile) {
 	t.Helper()
-	failIf(t, f.Permissions != "0700", "%s %s permissions = %q, want 0700", what, f.Path, f.Permissions)
-	failIf(t, f.Owner != "" && f.Owner != "root" && f.Owner != "root:root", "%s %s owner = %q, want root", what, f.Path, f.Owner)
+	testutil.FailIf(t, f.Permissions != "0700", "%s %s permissions = %q, want 0700", what, f.Path, f.Permissions)
+	testutil.FailIf(t, f.Owner != "" && f.Owner != "root" && f.Owner != "root:root", "%s %s owner = %q, want root", what, f.Path, f.Owner)
 }
 
 func TestRenderUserData_RunsTheNodeScriptThenTheInstallerThenStartsK3s(t *testing.T) {
 	_, cc := renderFixture(t)
-	node := cc.nodeScript(t)
-	installer := cc.installer(t)
+	node := cc.NodeScript(t)
+	installer := cc.Installer(t)
 	assertRootScript(t, "the node script", node)
 	assertRootScript(t, "the verified installer", installer)
-	fatalIf(t, node.Path == installer.Path, "the node script and the installer share the path %s", node.Path)
+	testutil.FatalIf(t, node.Path == installer.Path, "the node script and the installer share the path %s", node.Path)
 
-	run := cc.runcmdText()
+	run := cc.RuncmdText()
 	steps := []struct{ what, needle string }{
 		{"the node script", node.Path},
 		{"the verified installer", installer.Path},
@@ -291,15 +269,15 @@ func TestRenderUserData_RunsTheNodeScriptThenTheInstallerThenStartsK3s(t *testin
 	last := -1
 	for _, s := range steps {
 		at := strings.Index(run, s.needle)
-		fatalIf(t, at < 0, "runcmd never runs %s (%q):\n%s", s.what, s.needle, run)
-		failIf(t, at <= last, "runcmd runs %s before the step that must precede it:\n%s", s.what, run)
+		testutil.FatalIf(t, at < 0, "runcmd never runs %s (%q):\n%s", s.what, s.needle, run)
+		testutil.FailIf(t, at <= last, "runcmd runs %s before the step that must precede it:\n%s", s.what, run)
 		last = at
 	}
 }
 
 func TestRenderUserData_VerifiedInstallerPinsTheInstallerAndBinaryDigests(t *testing.T) {
 	_, cc := renderFixture(t)
-	body := cc.installer(t).Content
+	body := cc.Installer(t).Content
 	v := PinnedVersions
 
 	for _, needle := range []string{
@@ -310,16 +288,16 @@ func TestRenderUserData_VerifiedInstallerPinsTheInstallerAndBinaryDigests(t *tes
 		"sha256sum",
 		"/usr/local/bin/k3s",
 	} {
-		failIf(t, !strings.Contains(body, needle), "the verified installer does not contain %q", needle)
+		testutil.FailIf(t, !strings.Contains(body, needle), "the verified installer does not contain %q", needle)
 	}
 	for _, env := range []string{
 		`INSTALL_K3S_SKIP_DOWNLOAD=["']?true["']?`,
 		`INSTALL_K3S_VERSION=["']?v1\.36\.3\+k3s1["']?`,
 		`INSTALL_K3S_EXEC=["']?server["']?`,
 	} {
-		failIf(t, !regexp.MustCompile(env).MatchString(body), "the verified installer does not run install.sh with %s", env)
+		testutil.FailIf(t, !regexp.MustCompile(env).MatchString(body), "the verified installer does not run install.sh with %s", env)
 	}
-	failIf(t, strings.Contains(body, "get.k3s.io"), "the verified installer fetches the unpinned get.k3s.io script")
+	testutil.FailIf(t, strings.Contains(body, "get.k3s.io"), "the verified installer fetches the unpinned get.k3s.io script")
 }
 
 func TestRenderUserData_EveryVersionInputReachesTheDocument(t *testing.T) {
@@ -342,64 +320,45 @@ func TestRenderUserData_EveryVersionInputReachesTheDocument(t *testing.T) {
 	setKyvernoVersion(&in.Versions, "3.10.0")
 	_, cc := renderCC(t, in)
 
-	installer := cc.installer(t).Content
+	installer := cc.Installer(t).Content
 	for _, needle := range []string{
 		"https://github.com/k3s-io/k3s/releases/download/v1.37.1%2Bk3s1/k3s",
 		strings.Repeat("a", 64),
 		"https://raw.githubusercontent.com/k3s-io/k3s/" + strings.Repeat("b", 40) + "/install.sh",
 		strings.Repeat("c", 64),
 	} {
-		failIf(t, !strings.Contains(installer, needle), "the installer rendered with changed versions does not contain %q", needle)
+		testutil.FailIf(t, !strings.Contains(installer, needle), "the installer rendered with changed versions does not contain %q", needle)
 	}
 	if !regexp.MustCompile(`INSTALL_K3S_VERSION=["']?v1\.37\.1\+k3s1["']?`).MatchString(installer) {
 		t.Error("the installer does not install the K3sVersion it was rendered with")
 	}
 
-	cilium := yamlMap(t, "cilium.yaml", cc.file(t, "/var/lib/rancher/k3s/server/manifests/cilium.yaml").Content)
-	got := dig(cilium, "spec", "version")
-	failIf(t, got != "1.20.0", "cilium chart version = %#v, want the CiliumVersion input 1.20.0", got)
-	for _, d := range yamlDocs(t, "00-argocd-bootstrap.yaml", cc.file(t, "/var/lib/rancher/k3s/server/manifests/00-argocd-bootstrap.yaml").Content) {
+	cilium := testutil.YamlMap(t, "cilium.yaml", cc.File(t, "/var/lib/rancher/k3s/server/manifests/cilium.yaml").Content)
+	got := testutil.Dig(cilium, "spec", "version")
+	testutil.FailIf(t, got != "1.20.0", "cilium chart version = %#v, want the CiliumVersion input 1.20.0", got)
+	for _, d := range testutil.YamlDocs(t, "00-argocd-bootstrap.yaml", cc.File(t, "/var/lib/rancher/k3s/server/manifests/00-argocd-bootstrap.yaml").Content) {
 		if d["kind"] == "HelmChart" {
-			got := dig(d, "spec", "version")
-			failIf(t, got != "11.0.0", "argo-cd chart version = %#v, want the ArgoCDChartVersion input 11.0.0", got)
+			got := testutil.Dig(d, "spec", "version")
+			testutil.FailIf(t, got != "11.0.0", "argo-cd chart version = %#v, want the ArgoCDChartVersion input 11.0.0", got)
 		}
 	}
-}
-
-var credentialShapes = []string{
-	"PRIVATE KEY",
-	"client-key",
-	"client-certificate",
-	"certificate-authority-data",
-	"token-auth-file",
-	"token-file",
-	"agent-token",
-	"K3S_TOKEN",
-}
-
-func assertNoCredentialShapes(t *testing.T, what, text string) {
-	t.Helper()
-	for _, bad := range credentialShapes {
-		failIf(t, strings.Contains(text, bad), "%s carries %q", what, bad)
-	}
-	failIf(t, strings.Contains(strings.ToLower(text), "kubeconfig"), "%s mentions a kubeconfig", what)
 }
 
 func TestRenderUserData_CarriesNoCredentialButTheEnrolmentToken(t *testing.T) {
 	ud, cc := renderFixture(t)
-	assertNoCredentialShapes(t, "the rendered user data", cc.allText(ud))
-	for _, d := range yamlDocs(t, "the user data", ud) {
-		failIf(t, d["kind"] == "Config", "the user data is itself a kubeconfig document")
+	testutil.AssertNoCredentialShapes(t, "the rendered user data", cc.AllText(ud))
+	for _, d := range testutil.YamlDocs(t, "the user data", ud) {
+		testutil.FailIf(t, d["kind"] == "Config", "the user data is itself a kubeconfig document")
 	}
 
 	var holders []string
 	for _, f := range cc.WriteFiles {
-		if strings.Contains(f.Content, fixtureEnrolmentToken) {
+		if strings.Contains(f.Content, testutil.FixtureEnrolmentToken) {
 			holders = append(holders, f.Path)
 		}
 	}
-	failIf(t, !slices.Equal(holders, []string{"/etc/mitstack/enrolment.env"}), "the enrolment token is written to %v, want only /etc/mitstack/enrolment.env", holders)
-	failIf(t, strings.Contains(cc.runcmdText(), fixtureEnrolmentToken), "runcmd carries the enrolment token")
+	testutil.FailIf(t, !slices.Equal(holders, []string{"/etc/mitstack/enrolment.env"}), "the enrolment token is written to %v, want only /etc/mitstack/enrolment.env", holders)
+	testutil.FailIf(t, strings.Contains(cc.RuncmdText(), testutil.FixtureEnrolmentToken), "runcmd carries the enrolment token")
 }
 
 // keptOnTheHost is every file ADR 0087 keeps in the user data: node naming, the k3s install, the metadata guard,
@@ -430,20 +389,20 @@ func TestRenderUserData_WritesOnlyTheFilesTheDecisionRecordKeepsOnTheHost(t *tes
 		paths = append(paths, f.Path)
 	}
 
-	failIf(t, !slices.Equal(slices.Sorted(slices.Values(paths)), slices.Sorted(slices.Values(keptOnTheHost))), "the user data writes %q\nwant only %q", paths, keptOnTheHost)
+	testutil.FailIf(t, !slices.Equal(slices.Sorted(slices.Values(paths)), slices.Sorted(slices.Values(keptOnTheHost))), "the user data writes %q\nwant only %q", paths, keptOnTheHost)
 }
 
 func TestRenderUserData_TheLongestRenderingIsAtMost19000Bytes(t *testing.T) {
 	ud := renderOK(t, longestRenderInputs())
 
-	failIf(t, len(ud) > 19000, "the longest user data is %d bytes, want at most 19,000 now it carries only the bootstrap", len(ud))
+	testutil.FailIf(t, len(ud) > 19000, "the longest user data is %d bytes, want at most 19,000 now it carries only the bootstrap", len(ud))
 }
 
 func TestRenderUserData_RuncmdIsOneChainSoAFailedNodeScriptOrEnrolmentStopsK3s(t *testing.T) {
 	_, cc := renderFixture(t)
-	node := cc.nodeScript(t)
-	enrol := cc.enrolScript(t)
-	installer := cc.installer(t)
+	node := cc.NodeScript(t)
+	enrol := cc.EnrolScript(t)
+	installer := cc.Installer(t)
 	entry := runcmdChain(t, cc)
 	var steps []string
 	for _, step := range strings.Split(entry, " && ") {
@@ -461,29 +420,29 @@ func TestRenderUserData_RuncmdIsOneChainSoAFailedNodeScriptOrEnrolmentStopsK3s(t
 		installer.Path,
 		"systemctl enable --now k3s",
 	}
-	failIf(t, !slices.Equal(steps, want), "runcmd[0] without the metadata guard's start = %q\nwant %q", strings.Join(steps, " && "), strings.Join(want, " && "))
-	failIf(t, strings.Contains(entry, enrol.Path), "runcmd invokes the enrol script %s directly, want it run only by %s", enrol.Path, enrolUnitName)
+	testutil.FailIf(t, !slices.Equal(steps, want), "runcmd[0] without the metadata guard's start = %q\nwant %q", strings.Join(steps, " && "), strings.Join(want, " && "))
+	testutil.FailIf(t, strings.Contains(entry, enrol.Path), "runcmd invokes the enrol script %s directly, want it run only by %s", enrol.Path, enrolUnitName)
 }
 
-func runcmdChain(t *testing.T, cc cloudConfig) string {
+func runcmdChain(t *testing.T, cc testutil.CloudConfig) string {
 	t.Helper()
-	fatalIf(t, len(cc.RunCmd) != 1, "runcmd has %d entries, want exactly one chained entry: %#v", len(cc.RunCmd), cc.RunCmd)
+	testutil.FatalIf(t, len(cc.RunCmd) != 1, "runcmd has %d entries, want exactly one chained entry: %#v", len(cc.RunCmd), cc.RunCmd)
 	entry, ok := cc.RunCmd[0].(string)
-	fatalIf(t, !ok, "runcmd[0] is %T, want a string the shell runs as one && chain", cc.RunCmd[0])
+	testutil.FatalIf(t, !ok, "runcmd[0] is %T, want a string the shell runs as one && chain", cc.RunCmd[0])
 	return entry
 }
 
 func TestRenderUserData_RuncmdMasksSSHBeforeAnythingElse(t *testing.T) {
 	_, cc := renderFixture(t)
 	steps := strings.Split(runcmdChain(t, cc), " && ")
-	failIf(t, steps[0] != sshMask, "runcmd's chain begins %q, want %q before anything else", steps[0], sshMask)
+	testutil.FailIf(t, steps[0] != sshMask, "runcmd's chain begins %q, want %q before anything else", steps[0], sshMask)
 	n := slices.Index(steps[1:], sshMask)
-	failIf(t, n >= 0, "runcmd's chain masks SSH again at step %d, want once, first", n+2)
+	testutil.FailIf(t, n >= 0, "runcmd's chain masks SSH again at step %d, want once, first", n+2)
 }
 
 func TestRenderUserData_RuncmdStartsTheMetadataGuardAfterDaemonReloadAndBeforeK3s(t *testing.T) {
 	_, cc := renderFixture(t)
-	installer := cc.installer(t)
+	installer := cc.Installer(t)
 	steps := strings.Split(runcmdChain(t, cc), " && ")
 	at := map[string]int{}
 	for _, s := range []string{metadataGuardStart, "systemctl daemon-reload", installer.Path, "systemctl enable --now k3s"} {
@@ -494,11 +453,11 @@ func TestRenderUserData_RuncmdStartsTheMetadataGuardAfterDaemonReloadAndBeforeK3
 				at[s], n = i, n+1
 			}
 		}
-		fatalIf(t, n != 1, "runcmd's chain runs %q %d times, want once: %q", s, n, steps)
+		testutil.FatalIf(t, n != 1, "runcmd's chain runs %q %d times, want once: %q", s, n, steps)
 	}
 	guard := at[metadataGuardStart]
-	failIf(t, guard < at["systemctl daemon-reload"], "runcmd starts the metadata guard before the daemon-reload, so systemd has not read its unit: %q", steps)
-	failIf(t, guard > at[installer.Path] || guard > at["systemctl enable --now k3s"], "runcmd starts the metadata guard after the installer or the k3s start, so a pod could run before the rule: %q", steps)
+	testutil.FailIf(t, guard < at["systemctl daemon-reload"], "runcmd starts the metadata guard before the daemon-reload, so systemd has not read its unit: %q", steps)
+	testutil.FailIf(t, guard > at[installer.Path] || guard > at["systemctl enable --now k3s"], "runcmd starts the metadata guard after the installer or the k3s start, so a pod could run before the rule: %q", steps)
 }
 
 const (
@@ -552,7 +511,7 @@ func parseNft(t *testing.T, content string) []nftStatement {
 	}
 	flushWord()
 	stmts, rest := parseNftBlock(t, toks, false)
-	fatalIf(t, len(rest) != 0, "%s has an unmatched } before %q", metadataGuardRulesPath, rest)
+	testutil.FatalIf(t, len(rest) != 0, "%s has an unmatched } before %q", metadataGuardRulesPath, rest)
 	return stmts
 }
 
@@ -587,7 +546,7 @@ func parseNftBlock(t *testing.T, toks []string, inBlock bool) ([]nftStatement, [
 			cur = append(cur, tok)
 		}
 	}
-	fatalIf(t, inBlock, "%s leaves a { block unclosed", metadataGuardRulesPath)
+	testutil.FatalIf(t, inBlock, "%s leaves a { block unclosed", metadataGuardRulesPath)
 	flush()
 	return out, nil
 }
@@ -599,21 +558,21 @@ func isGuardTable(words []string) bool {
 
 func TestRenderUserData_MetadataGuardRulesetDropsForwardedTrafficToTheMetadataService(t *testing.T) {
 	_, cc := renderFixture(t)
-	f := cc.file(t, metadataGuardRulesPath)
-	failIf(t, f.Owner != "root:root", "%s owner = %q, want root:root", metadataGuardRulesPath, f.Owner)
-	failIf(t, f.Permissions != "0600", "%s permissions = %q, want 0600", metadataGuardRulesPath, f.Permissions)
+	f := cc.File(t, metadataGuardRulesPath)
+	testutil.FailIf(t, f.Owner != "root:root", "%s owner = %q, want root:root", metadataGuardRulesPath, f.Owner)
+	testutil.FailIf(t, f.Permissions != "0600", "%s permissions = %q, want 0600", metadataGuardRulesPath, f.Permissions)
 	for _, word := range []string{"flush", "ruleset"} {
-		failIf(t, slices.Contains(strings.Fields(f.Content), word), "%s says %q, want the guard's own table replaced and nothing else touched:\n%s", metadataGuardRulesPath, word, f.Content)
+		testutil.FailIf(t, slices.Contains(strings.Fields(f.Content), word), "%s says %q, want the guard's own table replaced and nothing else touched:\n%s", metadataGuardRulesPath, word, f.Content)
 	}
 
 	top := parseNft(t, f.Content)
-	fatalIf(t, len(top) != 3, "%s holds %d top-level statements, want three: declare the table, delete it, define it:\n%s", metadataGuardRulesPath, len(top), f.Content)
+	testutil.FatalIf(t, len(top) != 3, "%s holds %d top-level statements, want three: declare the table, delete it, define it:\n%s", metadataGuardRulesPath, len(top), f.Content)
 	declare := top[0]
-	failIf(t, !isGuardTable(declare.words) || len(declare.block) != 0, "%s first statement is %q, want the bare declaration table inet %s, so the delete after it never fails", metadataGuardRulesPath, declare.text(), metadataGuardTable)
+	testutil.FailIf(t, !isGuardTable(declare.words) || len(declare.block) != 0, "%s first statement is %q, want the bare declaration table inet %s, so the delete after it never fails", metadataGuardRulesPath, declare.text(), metadataGuardTable)
 	del := top[1]
-	failIf(t, del.text() != "delete table inet "+metadataGuardTable || del.hasBlock, "%s second statement is %q, want delete table inet %s", metadataGuardRulesPath, del.text(), metadataGuardTable)
+	testutil.FailIf(t, del.text() != "delete table inet "+metadataGuardTable || del.hasBlock, "%s second statement is %q, want delete table inet %s", metadataGuardRulesPath, del.text(), metadataGuardTable)
 	define := top[2]
-	fatalIf(t, !isGuardTable(define.words) || !define.hasBlock, "%s third statement is %q, want table inet %s { ... }", metadataGuardRulesPath, define.text(), metadataGuardTable)
+	testutil.FatalIf(t, !isGuardTable(define.words) || !define.hasBlock, "%s third statement is %q, want table inet %s { ... }", metadataGuardRulesPath, define.text(), metadataGuardTable)
 	if len(define.block) != 1 || define.block[0].text() != "chain forward" || !define.block[0].hasBlock {
 		var got []string
 		for _, s := range define.block {
@@ -626,7 +585,7 @@ func TestRenderUserData_MetadataGuardRulesetDropsForwardedTrafficToTheMetadataSe
 		chain = append(chain, s.text())
 	}
 	want := []string{metadataGuardChainHook, "policy accept", metadataGuardDropRule}
-	failIf(t, !slices.Equal(chain, want), "chain forward holds %q, want exactly %q", chain, want)
+	testutil.FailIf(t, !slices.Equal(chain, want), "chain forward holds %q, want exactly %q", chain, want)
 }
 
 const (
@@ -655,9 +614,9 @@ func parseSystemdUnit(t *testing.T, what, content string) systemdUnit {
 			}
 			continue
 		}
-		fatalIf(t, section == "", "%s line %d %q sits outside any [Section]", what, i+1, line)
+		testutil.FatalIf(t, section == "", "%s line %d %q sits outside any [Section]", what, i+1, line)
 		k, v, ok := strings.Cut(line, "=")
-		fatalIf(t, !ok, "%s line %d %q is not Key=Value", what, i+1, line)
+		testutil.FatalIf(t, !ok, "%s line %d %q is not Key=Value", what, i+1, line)
 		k = strings.TrimSpace(k)
 		u[section][k] = append(u[section][k], strings.TrimSpace(v))
 	}
@@ -710,31 +669,31 @@ func systemdSpan(s string) (time.Duration, bool) {
 	return total, true
 }
 
-func renderedUnit(t *testing.T, cc cloudConfig, path string) systemdUnit {
+func renderedUnit(t *testing.T, cc testutil.CloudConfig, path string) systemdUnit {
 	t.Helper()
-	f := cc.file(t, path)
-	failIf(t, f.Owner != "" && f.Owner != "root" && f.Owner != "root:root", "%s owner = %q, want root", path, f.Owner)
+	f := cc.File(t, path)
+	testutil.FailIf(t, f.Owner != "" && f.Owner != "root" && f.Owner != "root:root", "%s owner = %q, want root", path, f.Owner)
 	return parseSystemdUnit(t, path, f.Content)
 }
 
 func TestRenderUserData_RepositoryHTTPSURLIsTheClusterRepoURLInBothPlaces(t *testing.T) {
 	const otherOwner = "other-owner"
 	in := fixtureRenderInputs()
-	in.ClusterRepoURL = "https://github.com/" + otherOwner + "/" + otherAppName + "-cluster"
+	in.ClusterRepoURL = "https://github.com/" + otherOwner + "/" + testutil.OtherAppName + "-cluster"
 	want := in.ClusterRepoURL
 	_, cc := renderCC(t, in)
-	app := yamlMap(t, "10-cluster-root.yaml", cc.file(t, "/var/lib/rancher/k3s/server/manifests/10-cluster-root.yaml").Content)
-	got := dig(app, "spec", "source", "repoURL")
-	failIf(t, got != want, "cluster-root repoURL = %#v, want %q", got, want)
-	got2 := enrolmentEnv(t, cc)["MITSTACK_REPOSITORY_URL"]
-	failIf(t, got2 != want, "enrolment.env MITSTACK_REPOSITORY_URL = %q, want %q", got2, want)
+	app := testutil.YamlMap(t, "10-cluster-root.yaml", cc.File(t, "/var/lib/rancher/k3s/server/manifests/10-cluster-root.yaml").Content)
+	got := testutil.Dig(app, "spec", "source", "repoURL")
+	testutil.FailIf(t, got != want, "cluster-root repoURL = %#v, want %q", got, want)
+	got2 := testutil.EnrolmentEnv(t, cc)["MITSTACK_REPOSITORY_URL"]
+	testutil.FailIf(t, got2 != want, "enrolment.env MITSTACK_REPOSITORY_URL = %q, want %q", got2, want)
 }
 
 func TestRenderUserData_CarriesNoSSHRepositoryURL(t *testing.T) {
 	ud, cc := renderFixture(t)
-	text := cc.allText(ud)
+	text := cc.AllText(ud)
 	for _, bad := range []string{"git" + "@github.com:", "sshPrivateKey"} {
-		failIf(t, strings.Contains(text, bad), "the rendered user data carries %q", bad)
+		testutil.FailIf(t, strings.Contains(text, bad), "the rendered user data carries %q", bad)
 	}
 }
 
@@ -742,14 +701,14 @@ func longestRenderInputs() UserDataInputs {
 	in := fixtureRenderInputs()
 	in.SubscriptionID = "a" + strings.Repeat("b-c_d.", 10) + "0"
 	in.SubscriptionID += strings.Repeat("z", 63-len(in.SubscriptionID))
-	in.IssuerURL = issuerURLFor(fixtureBucket, in.SubscriptionID)
+	in.IssuerURL = testutil.IssuerURLFor(testutil.FixtureBucket, in.SubscriptionID)
 	in.ClusterRepoURL = "https://github.com/" + strings.Repeat("o", 38) + "9/" + strings.Repeat("r.", 46) + "-cluster"
 	return in
 }
 
 func TestRenderUserData_VerifiedInstallerLeavesStartingK3sToTheChain(t *testing.T) {
 	_, cc := renderFixture(t)
-	if !regexp.MustCompile(`INSTALL_K3S_SKIP_START=["']?true["']?`).MatchString(cc.installer(t).Content) {
+	if !regexp.MustCompile(`INSTALL_K3S_SKIP_START=["']?true["']?`).MatchString(cc.Installer(t).Content) {
 		t.Error("the verified installer does not run install.sh with INSTALL_K3S_SKIP_START=true")
 	}
 }
@@ -772,7 +731,7 @@ const (
 
 func TestRenderUserData_RuncmdEnablesTheAutoUpgradeUnitsBeforeTheInstaller(t *testing.T) {
 	_, cc := renderFixture(t)
-	installer := cc.installer(t)
+	installer := cc.Installer(t)
 	steps := strings.Split(runcmdChain(t, cc), " && ")
 	at := func(step string) int {
 		t.Helper()
@@ -782,15 +741,15 @@ func TestRenderUserData_RuncmdEnablesTheAutoUpgradeUnitsBeforeTheInstaller(t *te
 				n, found = n+1, i
 			}
 		}
-		fatalIf(t, n != 1, "runcmd's chain runs %q %d times, want once: %q", step, n, steps)
+		testutil.FatalIf(t, n != 1, "runcmd's chain runs %q %d times, want once: %q", step, n, steps)
 		return found
 	}
 	enable := at(autoUpgradeEnable)
-	failIf(t, enable > at(installer.Path), "runcmd's chain enables the auto-upgrade units after the installer, so a node without them still runs k3s: %q", steps)
+	testutil.FailIf(t, enable > at(installer.Path), "runcmd's chain enables the auto-upgrade units after the installer, so a node without them still runs k3s: %q", steps)
 	// The lists refresh once, straight after the units are enabled, and
 	// --no-block leaves the refresh running while the chain goes on to k3s.
 	refresh := at(aptDailyRefreshNow)
-	failIf(t, refresh != enable+1, "runcmd's chain runs %q at step %d, want it straight after %q at step %d: %q", aptDailyRefreshNow, refresh, autoUpgradeEnable, enable, steps)
+	testutil.FailIf(t, refresh != enable+1, "runcmd's chain runs %q at step %d, want it straight after %q at step %d: %q", aptDailyRefreshNow, refresh, autoUpgradeEnable, enable, steps)
 }
 
 func aptConfStatements(content string) string {
@@ -807,8 +766,8 @@ func aptConfStatements(content string) string {
 
 func TestRenderUserData_UnattendedUpgradesTakesTheUpdatesPocketAndNeverRebootsItself(t *testing.T) {
 	_, cc := renderFixture(t)
-	f := cc.file(t, unattendedUpgradesConf)
-	failIf(t, f.Permissions != "0644", "%s permissions = %q, want 0644", unattendedUpgradesConf, f.Permissions)
+	f := cc.File(t, unattendedUpgradesConf)
+	testutil.FailIf(t, f.Permissions != "0644", "%s permissions = %q, want 0644", unattendedUpgradesConf, f.Permissions)
 	conf := aptConfStatements(f.Content)
 	// An origin such as ${distro_id} holds braces inside its quotes, so the
 	// block's body skips over quoted strings whole.
@@ -819,23 +778,23 @@ func TestRenderUserData_UnattendedUpgradesTakesTheUpdatesPocketAndNeverRebootsIt
 			listed = append(listed, q[1])
 		}
 	}
-	failIf(t, !slices.Contains(listed, unattendedUpdatesOrigin), "%s adds the origins %q to Unattended-Upgrade::Allowed-Origins, want %q among them:\n%s", unattendedUpgradesConf, listed, unattendedUpdatesOrigin, f.Content)
+	testutil.FailIf(t, !slices.Contains(listed, unattendedUpdatesOrigin), "%s adds the origins %q to Unattended-Upgrade::Allowed-Origins, want %q among them:\n%s", unattendedUpgradesConf, listed, unattendedUpdatesOrigin, f.Content)
 	reboots := regexp.MustCompile(`Unattended-Upgrade::Automatic-Reboot\s+"([^"]*)"\s*;`).FindAllStringSubmatch(conf, -1)
-	failIf(t, len(reboots) == 0, "%s does not set Unattended-Upgrade::Automatic-Reboot \"false\":\n%s", unattendedUpgradesConf, f.Content)
+	testutil.FailIf(t, len(reboots) == 0, "%s does not set Unattended-Upgrade::Automatic-Reboot \"false\":\n%s", unattendedUpgradesConf, f.Content)
 	for _, m := range reboots {
-		failIf(t, m[1] != "false", "%s sets Unattended-Upgrade::Automatic-Reboot %q, want \"false\": kured reboots, inside the window and after a drain", unattendedUpgradesConf, m[1])
+		testutil.FailIf(t, m[1] != "false", "%s sets Unattended-Upgrade::Automatic-Reboot %q, want \"false\": kured reboots, inside the window and after a drain", unattendedUpgradesConf, m[1])
 	}
 }
 
 func TestRenderUserData_ClusterRootCarriesNoRetryPolicy(t *testing.T) {
 	for name, inputs := range goldenUserDataInputs {
 		t.Run(name, func(t *testing.T) {
-			cc := parseUserData(t, renderOK(t, inputs()))
-			app := yamlMap(t, "10-cluster-root.yaml", cc.file(t, "/var/lib/rancher/k3s/server/manifests/10-cluster-root.yaml").Content)
-			policy, ok := dig(app, "spec", "syncPolicy").(map[string]any)
-			fatalIf(t, !ok, "cluster-root spec.syncPolicy is %#v, want a mapping", dig(app, "spec", "syncPolicy"))
+			cc := testutil.ParseUserData(t, renderOK(t, inputs()))
+			app := testutil.YamlMap(t, "10-cluster-root.yaml", cc.File(t, "/var/lib/rancher/k3s/server/manifests/10-cluster-root.yaml").Content)
+			policy, ok := testutil.Dig(app, "spec", "syncPolicy").(map[string]any)
+			testutil.FatalIf(t, !ok, "cluster-root spec.syncPolicy is %#v, want a mapping", testutil.Dig(app, "spec", "syncPolicy"))
 			retry, present := policy["retry"]
-			failIf(t, present, "cluster-root spec.syncPolicy.retry = %#v, want no retry key, so a failed first sync stays failed where the node report shows it", retry)
+			testutil.FailIf(t, present, "cluster-root spec.syncPolicy.retry = %#v, want no retry key, so a failed first sync stays failed where the node report shows it", retry)
 		})
 	}
 }
@@ -848,18 +807,18 @@ const wantApplicationHealthCheck = `local h=obj.status and obj.status.health or 
 
 func applicationHealthCheckIn(t *testing.T, what, values string) any {
 	t.Helper()
-	return dig(yamlMap(t, what, values), "configs", "cm", argoCDApplicationHealthKey)
+	return testutil.Dig(testutil.YamlMap(t, what, values), "configs", "cm", argoCDApplicationHealthKey)
 }
 
 func TestRenderUserData_BothCopiesOfTheArgoCDValuesAssessEachChildApplicationsHealth(t *testing.T) {
 	eachVersions(t, func(t *testing.T, v Versions) {
-		chartValues, _ := dig(bootstrapHelmCharts(t, v)["argocd"], "spec", "valuesContent").(string)
+		chartValues, _ := testutil.Dig(bootstrapHelmCharts(t, v)["argocd"], "spec", "valuesContent").(string)
 		got := applicationHealthCheckIn(t, "the bootstrap argocd HelmChart's valuesContent", chartValues)
-		failIf(t, got != wantApplicationHealthCheck, "the bootstrap argocd HelmChart's valuesContent configs.cm[%q] = %#v, want %q, so cluster-root's first sync waits for each child Application in a wave to be Healthy", argoCDApplicationHealthKey, got, wantApplicationHealthCheck)
+		testutil.FailIf(t, got != wantApplicationHealthCheck, "the bootstrap argocd HelmChart's valuesContent configs.cm[%q] = %#v, want %q, so cluster-root's first sync waits for each child Application in a wave to be Healthy", argoCDApplicationHealthKey, got, wantApplicationHealthCheck)
 
-		appValues, _ := dig(seedApplications(t, v)["argocd"], "spec", "source", "helm", "values").(string)
-		got = applicationHealthCheckIn(t, seedArgoCDPath+" helm.values", appValues)
-		failIf(t, got != wantApplicationHealthCheck, "%s helm.values configs.cm[%q] = %#v, want %q, so the self-managed Argo CD keeps the check", seedArgoCDPath, argoCDApplicationHealthKey, got, wantApplicationHealthCheck)
+		appValues, _ := testutil.Dig(seedApplications(t, v)["argocd"], "spec", "source", "helm", "values").(string)
+		got = applicationHealthCheckIn(t, testutil.SeedArgoCDPath+" helm.values", appValues)
+		testutil.FailIf(t, got != wantApplicationHealthCheck, "%s helm.values configs.cm[%q] = %#v, want %q, so the self-managed Argo CD keeps the check", testutil.SeedArgoCDPath, argoCDApplicationHealthKey, got, wantApplicationHealthCheck)
 	})
 }
 
@@ -882,8 +841,8 @@ func TestRenderUserData_RefusesAKuredOrUpgradeControllerPinOutOfShape(t *testing
 
 			_, err := RenderUserData(in)
 
-			fatalIf(t, err == nil, "RenderUserData rendered with %s = %q, want a refusal", tc.field, fieldOf(in.Versions, tc.field))
-			failIf(t, !strings.Contains(err.Error(), tc.field), "RenderUserData refused %s = %q with %q, want the error to name %s", tc.field, fieldOf(in.Versions, tc.field), err, tc.field)
+			testutil.FatalIf(t, err == nil, "RenderUserData rendered with %s = %q, want a refusal", tc.field, fieldOf(in.Versions, tc.field))
+			testutil.FailIf(t, !strings.Contains(err.Error(), tc.field), "RenderUserData refused %s = %q with %q, want the error to name %s", tc.field, fieldOf(in.Versions, tc.field), err, tc.field)
 		})
 	}
 }
@@ -906,7 +865,7 @@ type unitRow struct {
 
 func TestRenderUserData_Units(t *testing.T) {
 	_, cc := renderFixture(t)
-	failIf(t, cc.enrolScript(t).Path != enrolScriptPath, "the enrol script is at %s, want %s", cc.enrolScript(t).Path, enrolScriptPath)
+	testutil.FailIf(t, cc.EnrolScript(t).Path != enrolScriptPath, "the enrol script is at %s, want %s", cc.EnrolScript(t).Path, enrolScriptPath)
 	rows := []unitRow{
 		{name: "enrol runs once, before k3s", path: enrolUnitPath, listed: []string{"Unit.Before=k3s.service"}, one: map[string]string{
 			"Service.Type": "oneshot", "Service.RemainAfterExit": "yes", "Service.ExecStart": enrolScriptPath, "Unit.ConditionPathExists": "!" + enrolmentJSONPath}},
@@ -922,35 +881,35 @@ func TestRenderUserData_Units(t *testing.T) {
 	}
 }
 
-func assertUnitRow(t *testing.T, cc cloudConfig, r unitRow) {
+func assertUnitRow(t *testing.T, cc testutil.CloudConfig, r unitRow) {
 	t.Helper()
 	u := renderedUnit(t, cc, r.path)
 	if r.perms != "" {
-		failIf(t, cc.file(t, r.path).Permissions != r.perms, "%s permissions = %q, want %s", r.path, cc.file(t, r.path).Permissions, r.perms)
+		testutil.FailIf(t, cc.File(t, r.path).Permissions != r.perms, "%s permissions = %q, want %s", r.path, cc.File(t, r.path).Permissions, r.perms)
 	}
 	split := func(k string) (string, string) { section, key, _ := strings.Cut(k, "."); return section, key }
 	for k, want := range r.one {
 		section, key := split(k)
 		got := u.one(t, r.path, section, key)
-		failIf(t, got != want, "%s [%s] %s = %q, want %q", r.path, section, key, got, want)
+		testutil.FailIf(t, got != want, "%s [%s] %s = %q, want %q", r.path, section, key, got, want)
 	}
 	for _, l := range r.listed {
 		k, name, _ := strings.Cut(l, "=")
 		section, key := split(k)
-		failIf(t, !u.listed(section, key, name), "%s does not list %s in %s: %v", r.path, name, k, u[section])
+		testutil.FailIf(t, !u.listed(section, key, name), "%s does not list %s in %s: %v", r.path, name, k, u[section])
 	}
 	for k, want := range r.spans {
 		section, key := split(k)
 		raw := u.one(t, r.path, section, key)
 		got, ok := systemdSpan(raw)
-		failIf(t, !ok || got != want, "%s %s = %q, want a span of %s", r.path, k, raw, want)
+		testutil.FailIf(t, !ok || got != want, "%s %s = %q, want a span of %s", r.path, k, raw, want)
 	}
 	for k, want := range r.assigned {
 		section, key := split(k)
-		failIf(t, !slices.Equal(u[section][key], want), "%s %s is assigned %q, want %q", r.path, k, u[section][key], want)
+		testutil.FailIf(t, !slices.Equal(u[section][key], want), "%s %s is assigned %q, want %q", r.path, k, u[section][key], want)
 	}
 	units := u["Timer"]["Unit"]
-	failIf(t, r.timerOf != "" && len(units) > 0 && !slices.Equal(units, []string{r.timerOf}), "%s Unit = %q, want %s", r.path, units, r.timerOf)
+	testutil.FailIf(t, r.timerOf != "" && len(units) > 0 && !slices.Equal(units, []string{r.timerOf}), "%s Unit = %q, want %s", r.path, units, r.timerOf)
 }
 
 func isFullLineComment(line string) bool {
@@ -971,13 +930,13 @@ func TestRenderUserData_EmbeddedScriptsCarryNoFullLineCommentOrBlankLineButKeepT
 			_, cc := renderCC(t, in)
 
 			for _, path := range embeddedScriptPaths() {
-				content := cc.file(t, path).Content
-				failIf(t, !strings.HasPrefix(content, "#!"), "%s starts with %q, want its #! shebang", path, firstLine(content))
+				content := cc.File(t, path).Content
+				testutil.FailIf(t, !strings.HasPrefix(content, "#!"), "%s starts with %q, want its #! shebang", path, testutil.FirstLine(content))
 				body, ended := strings.CutSuffix(content, "\n")
-				failIf(t, !ended, "%s does not end in a newline, which a here-document on its last line needs", path)
+				testutil.FailIf(t, !ended, "%s does not end in a newline, which a here-document on its last line needs", path)
 				for i, line := range strings.Split(body, "\n") {
-					failIf(t, isFullLineComment(line), "%s line %d is a full-line comment: %q", path, i+1, line)
-					failIf(t, isBlankLine(line), "%s line %d is blank", path, i+1)
+					testutil.FailIf(t, isFullLineComment(line), "%s line %d is a full-line comment: %q", path, i+1, line)
+					testutil.FailIf(t, isBlankLine(line), "%s line %d is blank", path, i+1)
 				}
 			}
 		})
@@ -988,7 +947,7 @@ var hereDocOpener = regexp.MustCompile(`<<-?\s*'?"?([A-Za-z_][A-Za-z0-9_]*)'?"?`
 
 func TestRenderUserData_NoEmbeddedScriptWritesABlankLineThroughAHereDocument(t *testing.T) {
 	installer, err := renderInstaller(fixtureRenderInputs().Versions)
-	fatalIf(t, err != nil, "renderInstaller: %v", err)
+	testutil.FatalIf(t, err != nil, "renderInstaller: %v", err)
 	sources := map[string]string{nodeScriptPath: nodeScript, enrolScriptPath: enrolScript, installerPath: installer}
 	opened := 0
 	for _, path := range embeddedScriptPaths() {
@@ -1002,18 +961,18 @@ func TestRenderUserData_NoEmbeddedScriptWritesABlankLineThroughAHereDocument(t *
 			python := m[1] == "PY"
 			j := i + 1
 			for ; j < len(lines) && strings.TrimLeft(lines[j], "\t") != m[1]; j++ {
-				failIf(t, !python && isBlankLine(lines[j]), "%s line %d is blank inside the here-document opened at line %d, and the render drops blank lines", path, j+1, i+1)
+				testutil.FailIf(t, !python && isBlankLine(lines[j]), "%s line %d is blank inside the here-document opened at line %d, and the render drops blank lines", path, j+1, i+1)
 			}
 			i = j
 		}
 	}
-	failIf(t, opened == 0, "no embedded script opens a here-document, so the check above pins nothing")
+	testutil.FailIf(t, opened == 0, "no embedded script opens a here-document, so the check above pins nothing")
 }
 
 func TestRenderUserData_StrippingRemovesOnlyFullLineCommentsAndBlankLinesFromEachScript(t *testing.T) {
 	in := fixtureRenderInputs()
 	installer, err := renderInstaller(in.Versions)
-	fatalIf(t, err != nil, "renderInstaller: %v", err)
+	testutil.FatalIf(t, err != nil, "renderInstaller: %v", err)
 	sources := map[string]string{
 		nodeScriptPath:  nodeScript,
 		enrolScriptPath: enrolScript,
@@ -1030,13 +989,13 @@ func TestRenderUserData_StrippingRemovesOnlyFullLineCommentsAndBlankLinesFromEac
 				}
 			}
 			want = append(want, "")
-			fatalIf(t, len(want) == len(strings.Split(source, "\n")), "%s has no full-line comment or blank line in its source, so the check below pins nothing", path)
+			testutil.FatalIf(t, len(want) == len(strings.Split(source, "\n")), "%s has no full-line comment or blank line in its source, so the check below pins nothing", path)
 
 			f, err := ScriptFile(path, source)
-			fatalIf(t, err != nil, "scriptFile(%s): %v", path, err)
-			got := strings.Split(decodeContent(t, cloudFile{Path: f.Path, Content: f.Content, Encoding: f.Encoding}), "\n")
+			testutil.FatalIf(t, err != nil, "scriptFile(%s): %v", path, err)
+			got := strings.Split(testutil.DecodeContent(t, testutil.CloudFile{Path: f.Path, Content: f.Content, Encoding: f.Encoding}), "\n")
 
-			failIf(t, !slices.Equal(got, want), "%s rendered %d lines, want the source's %d lines that are neither comment nor blank in order, byte-identical, then its final newline; first difference: %s",
+			testutil.FailIf(t, !slices.Equal(got, want), "%s rendered %d lines, want the source's %d lines that are neither comment nor blank in order, byte-identical, then its final newline; first difference: %s",
 				path, len(got), len(want), firstLineDifference(got, want))
 		})
 	}
