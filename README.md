@@ -46,7 +46,7 @@ auto-deploy directory, so the cluster comes up while the platform is down.
 | Part | Files | What they hold |
 |---|---|---|
 | The render | `cluster/render.go`, `cluster/scripts.go` | The cloud-config document, the k3s server config, the bootstrap Cilium and Argo CD charts, and the node scripts it embeds from `cluster/scripts/` |
-| The cluster seed | `cluster/clusterseed.go`, `cluster/cloudnativepg.go`, `cluster/localpvlvm.go` | The Argo CD Applications and objects a cluster repository starts with, and the components copied from a cluster-bases release into `cluster/clusterbases/` |
+| The cluster seed | `cluster/clusterseed.go`, `cluster/cloudnativepg.go`, `cluster/localpvlvm.go` | The Argo CD Applications and objects a cluster repository starts with, and the components copied from a release of mitstack-eu/cluster-bases, the repository of pinned third-party manifests, into `cluster/clusterbases/` |
 | The boot components | `cluster/bootcomponents.go`, `cluster/bootsecrets.go` | What a cluster that hosts the platform starts before Argo CD runs, the Sealed Secrets key pair it boots with, and the Job that initialises OpenBao |
 | The node agent | `cluster/scripts/nodeagent/` | The image that runs the node report, the repository-token refresh, the patch check and OpenBao's init, its manifest, and the digest of the signed image the seed pins |
 | The hardening | `cluster/units.go`, `cluster/unattendedupgrades.go`, `cluster/admission.go` | The metadata guard that drops pod traffic to Hetzner's metadata service, SSH masked at boot, unattended upgrades in a maintenance window, and the Kyverno admission policies in `cluster/admission/` |
@@ -92,11 +92,15 @@ of each shape's user data.
 
 The tests compare the user data and the seed byte for byte with the
 recordings in `cluster/testdata/golden/`, so an edit to what a node boots
-fails them until you record the new bytes on purpose. Two functions have no
-test in this repository: `RenderDedicatedSeed` and `HostsPlatformSeed` are
-exercised by hcloud-k3s-cluster's tests, which subscribe a dedicated server
-or a cluster that hosts the platform against fakes and check the files its
-repository receives.
+fails them until you record the new bytes on purpose.
+
+The package `github.com/mitstack-eu/k3s-cluster-kit/testutil` holds the
+fixtures, the script fakes and the checks that this module's tests and a
+block's tests share. A block's tests import it, so each fake exists once:
+`testutil/fixtures.go` holds the fixture values, `testutil/userdata.go`
+parses a rendered cloud-config, `testutil/scripts.go` runs a script against
+a fake platform endpoint or a fake tool, and `testutil/checks.go` holds the
+assertions.
 [The development page](docs/development.md) lists each script, its test file
 and the k3s proofs CI runs. Run the suites from the repository root:
 

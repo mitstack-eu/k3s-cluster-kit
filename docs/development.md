@@ -81,7 +81,10 @@ shellcheck scripts/*.sh scripts/nodeagent/*.sh scripts/ci/*.sh
 
 ## How the script suites run
 
-The script suites run the real scripts against local fakes:
+The script suites run the real scripts against local fakes. The fakes a
+block's tests also need, the fake platform endpoint in `FakeEnrolment` and
+the fake command in `NewFakeTool`, sit in `testutil/scripts.go`; the rest sit
+in `harness_test.go`.
 
 | Test file | What it runs | Against what |
 |---|---|---|
@@ -90,7 +93,7 @@ The script suites run the real scripts against local fakes:
 | `reportscript_test.go` | The image's `mitstack-host` and `mitstack-report` | A local HTTPS server playing the report endpoint. A fake `nsenter` runs the collection in the test's own namespaces, and a fake `journalctl`, a fake `k3s` that also answers as `kubectl`, and fake `ss`, `systemctl` and `nft` answer it |
 | `reportcompare_test.go` | The same scripts over the same fakes | Checks that the report carries every field path of the host report kept in `testdata/host-report-3.0.0.sh` |
 | `repotokenscript_test.go` | The image's `mitstack-repo-token` | A local HTTPS server playing the refresh endpoint, with `kubectl` answered by the fake `k3s` |
-| `nodeagent_test.go` | The seeded node agent's objects, and the probe Job's command | The rights ADR 0087 grants, and a fake `curl`, so one case waits out the pod's 10 seconds |
+| `nodeagent_test.go` | The seeded node agent's objects, and the probe Job's command | The rights the platform's ADR 0087 grants the node agent, and a fake `curl`, so one case waits out the pod's 10 seconds |
 | `clusterseed_test.go` | The seeded `Application`s | The boot `HelmChart`s they must match |
 | `installerscript_test.go` | The rendered installer | Stub `curl`, `uname` and `install` commands |
 | `patchcheck_test.go` | The rendered patch check | A fake `k3s`, `apt-get` and `uname`, a scratch `/boot`, and a local HTTPS server that plays the k3s channels and GitHub's release listing, with the clock set by `MITSTACK_NOW` |
