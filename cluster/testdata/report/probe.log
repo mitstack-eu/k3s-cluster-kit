@@ -1,0 +1,6 @@
+t=0s 2026-10-04T09:50:04Z: http=000 bytes=0
+curl: (28) Connection timed out after 1001 milliseconds
+t=2s 2026-10-04T09:50:06Z: http=000 bytes=0
+curl: (28) Connection timed out after 1001 milliseconds
+t=10s 2026-10-04T09:50:14Z: http=000 bytes=0
+curl: (28) Connection timed out after 1001 milliseconds

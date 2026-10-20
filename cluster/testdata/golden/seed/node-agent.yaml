@@ -1,0 +1,399 @@
+# The node report, the repository-token refresh and the metadata probe, with
+# the rights ADR 0087 grants each. The seed splices the pinned image digest in
+# at ghcr.io/mitstack-eu/mitstack-node-agent@sha256:2cba3ed4290db41b5f4ac6fe601b1a30c1c490f5c2847643b8a57eaba3d5a0bc, and a new digest reaches the cluster by one commit.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mitstack-node
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mitstack-metadata-probe
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mitstack-node-report
+  namespace: mitstack-node
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mitstack-repo-token
+  namespace: mitstack-node
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mitstack-node-report
+rules:
+- apiGroups: [""]
+  resources: [nodes, namespaces]
+  verbs: [get, list]
+- apiGroups: [networking.k8s.io]
+  resources: [networkpolicies]
+  verbs: [get, list]
+- apiGroups: [cert-manager.io]
+  resources: [certificates]
+  verbs: [get, list]
+- apiGroups: [acme.cert-manager.io]
+  resources: [challenges]
+  verbs: [get, list]
+- apiGroups: [authorization.k8s.io]
+  resources: [subjectaccessreviews]
+  verbs: [create]
+- nonResourceURLs: [/openid/v1/jwks]
+  verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mitstack-node-report
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: mitstack-node-report
+subjects:
+- kind: ServiceAccount
+  name: mitstack-node-report
+  namespace: mitstack-node
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mitstack-node-report
+  namespace: argocd
+rules:
+- apiGroups: [""]
+  resources: [pods, services]
+  verbs: [get, list]
+- apiGroups: [networking.k8s.io]
+  resources: [ingresses]
+  verbs: [get, list]
+- apiGroups: [argoproj.io]
+  resources: [applications, appprojects]
+  verbs: [get, list]
+- apiGroups: [metrics.k8s.io]
+  resources: [pods]
+  verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mitstack-node-report
+  namespace: kube-system
+rules:
+- apiGroups: [""]
+  resources: [pods]
+  verbs: [get, list]
+- apiGroups: [batch]
+  resources: [jobs]
+  verbs: [get, list]
+- apiGroups: [helm.cattle.io]
+  resources: [helmcharts]
+  verbs: [get, list]
+- apiGroups: [metrics.k8s.io]
+  resources: [pods]
+  verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mitstack-node-report
+  namespace: system-upgrade
+rules:
+- apiGroups: [upgrade.cattle.io]
+  resources: [plans]
+  verbs: [get, list]
+- apiGroups: [batch]
+  resources: [jobs]
+  verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mitstack-node-report
+  namespace: mitstack-metadata-probe
+rules:
+- apiGroups: [""]
+  resources: [pods]
+  verbs: [get, list]
+- apiGroups: [""]
+  resources: [pods/log]
+  verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mitstack-repo-token
+  namespace: argocd
+rules:
+- apiGroups: [""]
+  resources: [secrets]
+  resourceNames: [cluster-repository]
+  verbs: [patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mitstack-repo-token
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mitstack-repo-token
+subjects:
+- kind: ServiceAccount
+  name: mitstack-repo-token
+  namespace: mitstack-node
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mitstack-node-report
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mitstack-node-report
+subjects:
+- kind: ServiceAccount
+  name: mitstack-node-report
+  namespace: mitstack-node
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mitstack-node-report
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mitstack-node-report
+subjects:
+- kind: ServiceAccount
+  name: mitstack-node-report
+  namespace: mitstack-node
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mitstack-node-report
+  namespace: system-upgrade
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mitstack-node-report
+subjects:
+- kind: ServiceAccount
+  name: mitstack-node-report
+  namespace: mitstack-node
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mitstack-node-report
+  namespace: mitstack-metadata-probe
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mitstack-node-report
+subjects:
+- kind: ServiceAccount
+  name: mitstack-node-report
+  namespace: mitstack-node
+---
+# Only the report container gets an API token, so the privileged host
+# container holds none of its own.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mitstack-node-agent
+  namespace: mitstack-node
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      mitstack.dev/app: mitstack-node-agent
+  template:
+    metadata:
+      labels:
+        mitstack.dev/app: mitstack-node-agent
+    spec:
+      serviceAccountName: mitstack-node-report
+      automountServiceAccountToken: false
+      hostPID: true
+      securityContext:
+        fsGroup: 10001
+      containers:
+      - name: report
+        image: ghcr.io/mitstack-eu/mitstack-node-agent@sha256:2cba3ed4290db41b5f4ac6fe601b1a30c1c490f5c2847643b8a57eaba3d5a0bc
+        command: [/bin/sh, -c, "sleep 120; while :; do mitstack-report; sleep 300; done"]
+        env:
+        - name: HOME
+          value: /tmp
+        - name: KUBECONFIG
+          value: /opt/mitstack/in-cluster.kubeconfig
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 10001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        resources:
+          requests: {cpu: 10m, memory: 64Mi}
+          limits: {cpu: 500m, memory: 256Mi}
+        volumeMounts:
+        - {name: host-evidence, mountPath: /run/mitstack-host, readOnly: true}
+        - {name: report-token, mountPath: /var/run/mitstack, readOnly: true}
+        - {name: api-token, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true}
+        - {name: tmp, mountPath: /tmp}
+      - name: host
+        image: ghcr.io/mitstack-eu/mitstack-node-agent@sha256:2cba3ed4290db41b5f4ac6fe601b1a30c1c490f5c2847643b8a57eaba3d5a0bc
+        command: [/bin/sh, -c, "while :; do mitstack-host; sleep 300; done"]
+        securityContext:
+          privileged: true
+        resources:
+          requests: {cpu: 10m, memory: 64Mi}
+          limits: {cpu: "1", memory: 512Mi}
+        volumeMounts:
+        - {name: host-evidence, mountPath: /run/mitstack-host}
+      volumes:
+      - name: host-evidence
+        emptyDir: {medium: Memory, sizeLimit: 64Mi}
+      - name: tmp
+        emptyDir: {medium: Memory, sizeLimit: 64Mi}
+      - name: report-token
+        secret: {secretName: mitstack-report-token, defaultMode: 0440}
+      - name: api-token
+        projected:
+          defaultMode: 0440
+          sources:
+          - serviceAccountToken: {path: token, expirationSeconds: 3600}
+          - configMap:
+              name: kube-root-ca.crt
+              items: [{key: ca.crt, path: ca.crt}]
+          - downwardAPI:
+              items: [{path: namespace, fieldRef: {fieldPath: metadata.namespace}}]
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mitstack-repo-token
+  namespace: mitstack-node
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            mitstack.dev/app: mitstack-repo-token
+        spec:
+          serviceAccountName: mitstack-repo-token
+          restartPolicy: Never
+          securityContext:
+            fsGroup: 10001
+          containers:
+          - name: refresh
+            image: ghcr.io/mitstack-eu/mitstack-node-agent@sha256:2cba3ed4290db41b5f4ac6fe601b1a30c1c490f5c2847643b8a57eaba3d5a0bc
+            command: [mitstack-repo-token]
+            env:
+            - name: HOME
+              value: /tmp
+            - name: KUBECONFIG
+              value: /opt/mitstack/in-cluster.kubeconfig
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 10001
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop: [ALL]
+            resources:
+              requests: {cpu: 10m, memory: 32Mi}
+              limits: {cpu: 200m, memory: 128Mi}
+            volumeMounts:
+            - {name: report-token, mountPath: /var/run/mitstack, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+          volumes:
+          - name: report-token
+            secret: {secretName: mitstack-report-token, defaultMode: 0440}
+          - name: tmp
+            emptyDir: {medium: Memory, sizeLimit: 16Mi}
+---
+# The probe discards the user data it gets and exits 0 however it ends; the
+# report reads its pod and log.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mitstack-metadata-probe
+  namespace: mitstack-metadata-probe
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      containers:
+      - name: probe
+        image: quay.io/curl/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
+        command:
+        - sh
+        - -c
+        - |
+          exec 3>&1
+          start=$(date +%s)
+          for n in 0 2 10; do
+            delay=$((start + n - $(date +%s)))
+            [ "$delay" -le 0 ] || sleep "$delay"
+            at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            err=$( {
+              out=$(curl -sS -o /dev/null --connect-timeout 1 --max-time 2 \
+                -w 'http=%{http_code} bytes=%{size_download}' http://169.254.169.254/hetzner/v1/userdata)
+              printf 't=%ss %s: %s\n' "$n" "$at" "$out" >&3
+            } 2>&1)
+            [ -z "$err" ] || printf '%s\n' "$err"
+          done
+          exit 0
+        resources:
+          requests: {cpu: 10m, memory: 16Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+---
+# The generated default-deny leaves the report and the refresh only the API
+# server, DNS, Argo CD's server and HTTPS to the platform.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: mitstack-node-egress
+  namespace: mitstack-node
+spec:
+  endpointSelector: {}
+  egress:
+  - toEntities: [kube-apiserver]
+  - toEndpoints:
+    - matchLabels: {k8s:io.kubernetes.pod.namespace: kube-system, k8s-app: kube-dns}
+    toPorts:
+    - ports: [{port: "53", protocol: ANY}]
+  - toEndpoints:
+    - matchLabels: {k8s:io.kubernetes.pod.namespace: argocd, app.kubernetes.io/name: argocd-server}
+    toPorts:
+    - ports: [{port: "8080", protocol: TCP}]
+  - toEntities: [world]
+    toPorts:
+    - ports: [{port: "443", protocol: TCP}]

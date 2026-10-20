@@ -1,0 +1,23 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "metadata": {"resourceVersion": ""},
+  "items": [
+    {"apiVersion": "v1", "kind": "Service",
+     "metadata": {"name": "argocd-applicationset-controller", "namespace": "argocd"},
+     "spec": {"type": "ClusterIP", "clusterIP": "10.43.77.11", "ports": [{"name": "webhook", "port": 7000, "protocol": "TCP"}]}},
+    {"apiVersion": "v1", "kind": "Service",
+     "metadata": {"name": "argocd-redis", "namespace": "argocd"},
+     "spec": {"type": "ClusterIP", "clusterIP": "10.43.77.12", "ports": [{"name": "tcp-redis", "port": 6379, "protocol": "TCP"}]}},
+    {"apiVersion": "v1", "kind": "Service",
+     "metadata": {"name": "argocd-repo-server", "namespace": "argocd"},
+     "spec": {"type": "ClusterIP", "clusterIP": "10.43.77.13", "ports": [{"name": "tcp-repo-server", "port": 8081, "protocol": "TCP"}]}},
+    {"apiVersion": "v1", "kind": "Service",
+     "metadata": {"name": "argocd-server", "namespace": "argocd"},
+     "spec": {"type": "ClusterIP", "clusterIP": "10.43.77.20",
+       "ports": [{"name": "http", "port": 80, "protocol": "TCP"}, {"name": "https", "port": 443, "protocol": "TCP"}]}},
+    {"apiVersion": "v1", "kind": "Service",
+     "metadata": {"name": "argocd-server-public", "namespace": "argocd"},
+     "spec": {"type": "NodePort", "clusterIP": "10.43.77.21", "ports": [{"name": "https", "port": 443, "nodePort": 30443, "protocol": "TCP"}]}}
+  ]
+}

@@ -1,0 +1,192 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: admission-fixtures
+  namespace: mitstack-admission-probe
+data:
+  mitstack-disallow-host-path: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: refused-disallow-host-path
+      namespace: mitstack-admission-probe
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: refused-disallow-host-path
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: refused-disallow-host-path
+            mitstack.dev/app: probe
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: app
+            image: ghcr.io/mitstack-eu/probe@sha256:0000000000000000000000000000000000000000000000000000000000000000
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: [ALL]
+            resources:
+              limits:
+                cpu: 100m
+                memory: 64Mi
+            volumeMounts:
+            - name: scratch
+              mountPath: /scratch
+          volumes:
+          - name: scratch
+            hostPath:
+              path: /var/lib/probe
+  mitstack-require-app-label: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: refused-require-app-label
+      namespace: mitstack-admission-probe
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: refused-require-app-label
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: refused-require-app-label
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: app
+            image: ghcr.io/mitstack-eu/probe@sha256:0000000000000000000000000000000000000000000000000000000000000000
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: [ALL]
+            resources:
+              limits:
+                cpu: 100m
+                memory: 64Mi
+  mitstack-require-image-digest: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: refused-require-image-digest
+      namespace: mitstack-admission-probe
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: refused-require-image-digest
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: refused-require-image-digest
+            mitstack.dev/app: probe
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: app
+            image: ghcr.io/mitstack-eu/probe:1.0.0
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: [ALL]
+            resources:
+              limits:
+                cpu: 100m
+                memory: 64Mi
+  mitstack-require-resource-limits: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: refused-require-resource-limits
+      namespace: mitstack-admission-probe
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: refused-require-resource-limits
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: refused-require-resource-limits
+            mitstack.dev/app: probe
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: app
+            image: ghcr.io/mitstack-eu/probe@sha256:0000000000000000000000000000000000000000000000000000000000000000
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: [ALL]
+  mitstack-restrict-image-registries: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: refused-restrict-image-registries
+      namespace: mitstack-admission-probe
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: refused-restrict-image-registries
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: refused-restrict-image-registries
+            mitstack.dev/app: probe
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+          - name: app
+            image: docker.io/library/probe@sha256:0000000000000000000000000000000000000000000000000000000000000000
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop: [ALL]
+            resources:
+              limits:
+                cpu: 100m
+                memory: 64Mi
+  pod-security-restricted: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: pod-security-restricted
+      namespace: mitstack-admission-probe
+      labels:
+        mitstack.dev/app: probe
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: app
+        image: ghcr.io/mitstack-eu/probe@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        securityContext:
+          privileged: true
+          capabilities:
+            drop: [ALL]
+        resources:
+          limits:
+            cpu: 100m
+            memory: 64Mi

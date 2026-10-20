@@ -1,0 +1,1 @@
+namespace/argocd labeled (server dry run)

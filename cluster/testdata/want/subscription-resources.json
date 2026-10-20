@@ -1,0 +1,134 @@
+[
+  {
+    "kind": "deployment.apps",
+    "name": "web",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "statefulset.apps",
+    "name": "db",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "daemonset.apps",
+    "name": "log-agent",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "pod",
+    "name": "web-6d4cf56db6-x2x8k",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "service",
+    "name": "web",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "ingress.networking.k8s.io",
+    "name": "web",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "configmap",
+    "name": "web-config",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "secret",
+    "name": "web-env",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "serviceaccount",
+    "name": "web",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "role.rbac.authorization.k8s.io",
+    "name": "web",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "rolebinding.rbac.authorization.k8s.io",
+    "name": "web",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "networkpolicy.networking.k8s.io",
+    "name": "default-deny",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "resourcequota",
+    "name": "quota",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "limitrange",
+    "name": "limits",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "persistentvolumeclaim",
+    "name": "data",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "certificate.cert-manager.io",
+    "name": "web-tls",
+    "namespace": "demo",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "application.argoproj.io",
+    "name": "demo",
+    "namespace": "argocd",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "appproject.argoproj.io",
+    "name": "demo",
+    "namespace": "argocd",
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "deployment.apps",
+    "name": "shop",
+    "namespace": "shop",
+    "subscription": "c4d5e6f7-0a1b-4c2d-8e3f-9a0b1c2d3e4f"
+  },
+  {
+    "kind": "secret",
+    "name": "shop-env",
+    "namespace": "shop",
+    "subscription": "c4d5e6f7-0a1b-4c2d-8e3f-9a0b1c2d3e4f"
+  },
+  {
+    "kind": "namespace",
+    "name": "demo",
+    "namespace": null,
+    "subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+  },
+  {
+    "kind": "namespace",
+    "name": "shop",
+    "namespace": null,
+    "subscription": "c4d5e6f7-0a1b-4c2d-8e3f-9a0b1c2d3e4f"
+  }
+]

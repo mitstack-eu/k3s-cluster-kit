@@ -1,0 +1,11 @@
+{
+  "kind": "PodMetricsList", "apiVersion": "metrics.k8s.io/v1beta1", "metadata": {},
+  "items": [
+    {"metadata": {"name": "argocd-application-controller-0", "namespace": "argocd", "labels": {"app.kubernetes.io/name": "argocd-application-controller"}},
+     "timestamp": "2026-10-01T09:44:51Z", "window": "10.512s",
+     "containers": [{"name": "argocd-application-controller", "usage": {"cpu": "31245112n", "memory": "212344Ki"}}]},
+    {"metadata": {"name": "argocd-server-6d9f7c8b5-x2x7k", "namespace": "argocd", "labels": {"app.kubernetes.io/name": "argocd-server"}},
+     "timestamp": "2026-10-01T09:44:53Z", "window": "11.03s",
+     "containers": [{"name": "argocd-server", "usage": {"cpu": "2105472n", "memory": "48264Ki"}}]}
+  ]
+}

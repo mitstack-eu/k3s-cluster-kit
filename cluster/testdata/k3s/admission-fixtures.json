@@ -1,0 +1,17 @@
+{
+  "apiVersion": "v1",
+  "kind": "ConfigMap",
+  "metadata": {
+    "name": "admission-fixtures",
+    "namespace": "mitstack-admission-probe",
+    "creationTimestamp": "2026-10-01T09:16:02Z"
+  },
+  "data": {
+    "mitstack-disallow-host-path": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: refused-disallow-host-path\n  namespace: mitstack-admission-probe\n",
+    "mitstack-require-app-label": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: refused-require-app-label\n  namespace: mitstack-admission-probe\n",
+    "mitstack-require-image-digest": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: refused-require-image-digest\n  namespace: mitstack-admission-probe\n",
+    "mitstack-require-resource-limits": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: refused-require-resource-limits\n  namespace: mitstack-admission-probe\n",
+    "mitstack-restrict-image-registries": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: refused-restrict-image-registries\n  namespace: mitstack-admission-probe\n",
+    "pod-security-restricted": "apiVersion: v1\nkind: Pod\nmetadata:\n  name: pod-security-restricted\n  namespace: mitstack-admission-probe\n"
+  }
+}

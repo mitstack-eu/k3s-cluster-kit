@@ -1,0 +1,22 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: mitstack-restrict-image-registries
+policies:
+- ../../policies/mitstack-restrict-image-registries.yaml
+resources:
+- accepted.yaml
+- refused.yaml
+results:
+- isValidatingPolicy: true
+  policy: mitstack-restrict-image-registries
+  kind: Deployment
+  resources:
+  - accepted-restrict-image-registries
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-restrict-image-registries
+  kind: Deployment
+  resources:
+  - refused-restrict-image-registries
+  result: fail

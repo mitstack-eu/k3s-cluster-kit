@@ -1,0 +1,26 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: mitstack-require-app-label
+  annotations:
+    mitstack.dev/standard: NSA and CISA Kubernetes Hardening Guide
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, daemonsets, jobs, cronjobs, replicasets]
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["pods"]
+    namespaceSelector:
+      matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: NotIn
+        values: [kube-system, kube-public, kube-node-lease, argocd, kyverno, traefik, cert-manager, system-upgrade, mitstack-metadata-probe, openbao, external-secrets, cnpg-system]
+  validations:
+  - expression: 'object.metadata.?labels[?"mitstack.dev/app"].orValue("") != ""'
+    message: "mitstack-require-app-label: every pod must carry a non-empty mitstack.dev/app label, which the app's network policies select it by"

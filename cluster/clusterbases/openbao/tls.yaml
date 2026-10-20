@@ -1,0 +1,75 @@
+# The authority signs through a namespaced Issuer, so only an object in openbao can obtain a certificate OpenBao's clients trust.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: openbao-selfsigned
+  namespace: openbao
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao-ca
+  namespace: openbao
+spec:
+  isCA: true
+  commonName: OpenBao CA
+  secretName: openbao-ca
+  duration: 87600h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Never
+  issuerRef:
+    kind: Issuer
+    name: openbao-selfsigned
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: openbao-ca
+  namespace: openbao
+spec:
+  ca:
+    secretName: openbao-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openbao-tls
+  namespace: openbao
+spec:
+  secretName: openbao-tls
+  duration: 2160h
+  renewBefore: 720h
+  dnsNames:
+    - openbao.openbao.svc
+    - openbao.openbao.svc.cluster.local
+  ipAddresses:
+    - 127.0.0.1
+  usages:
+    - digital signature
+    - server auth
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Always
+  issuerRef:
+    kind: Issuer
+    name: openbao-ca
+---
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: openbao-ca
+  annotations:
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  sources:
+    - secret:
+        name: openbao-ca
+        key: tls.crt
+  target:
+    configMap:
+      key: ca.crt

@@ -1,0 +1,54 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "metadata": {"resourceVersion": ""},
+  "items": [
+    {
+      "apiVersion": "postgresql.cnpg.io/v1",
+      "kind": "Cluster",
+      "metadata": {
+        "name": "shared",
+        "namespace": "app-s4338-pg",
+        "labels": {"mitstack.dev/app": "s4338-pg", "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"},
+        "creationTimestamp": "2026-10-19T09:16:02Z"
+      },
+      "spec": {
+        "instances": 1,
+        "imageName": "ghcr.io/cloudnative-pg/postgresql:16.15-system-trixie@sha256:8ca5699981c25db72e549e9fa69561bac233df15b9b1e3a6282847b0629bb5ea",
+        "storage": {"size": "20Gi"},
+        "superuserSecret": {"name": "shared-superuser"}
+      },
+      "status": {
+        "phase": "Cluster in healthy state",
+        "instances": 1,
+        "readyInstances": 1,
+        "currentPrimary": "shared-1",
+        "certificates": {"serverCASecret": "shared-ca"},
+        "conditions": [{"type": "Ready", "status": "True", "reason": "ClusterIsReady", "message": "Cluster is Ready"}]
+      }
+    },
+    {
+      "apiVersion": "postgresql.cnpg.io/v1",
+      "kind": "Database",
+      "metadata": {
+        "name": "plain",
+        "namespace": "app-s4338-pg",
+        "labels": {"mitstack.dev/subscription": "0c4f1a2b-3d5e-4f60-8a7b-9c0d1e2f3a4b"},
+        "creationTimestamp": "2026-10-19T09:20:41Z"
+      },
+      "spec": {"name": "plain", "owner": "plain", "cluster": {"name": "shared"}},
+      "status": {"applied": true, "observedGeneration": 1}
+    },
+    {
+      "apiVersion": "postgresql.cnpg.io/v1",
+      "kind": "DatabaseRole",
+      "metadata": {
+        "name": "plain",
+        "namespace": "app-s4338-pg",
+        "creationTimestamp": "2026-10-19T09:20:41Z"
+      },
+      "spec": {"name": "plain", "cluster": {"name": "shared"}, "passwordSecret": {"name": "plain-password"}},
+      "status": {"applied": false, "message": "while reconciling the role: secret \"plain-password\" not found", "observedGeneration": 1}
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "metadata": {"resourceVersion": ""},
+  "items": [
+    {
+      "metadata": {"name": "helm-install-cilium", "namespace": "kube-system", "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {"helmcharts.helm.cattle.io/chart": "cilium"}, "annotations": {"helmcharts.helm.cattle.io/configHash": "SHA256=@SECRET@"}},
+      "spec": {"backoffLimit": 1000, "template": {"spec": {"containers": [{
+        "name": "helm", "image": "rancher/klipper-helm:v0.9.8-build20250709", "args": ["install"],
+        "env": [
+          {"name": "NAME", "value": "cilium"},
+          {"name": "VERSION", "value": "1.19.3"},
+          {"name": "REPO", "value": "https://helm.cilium.io/"},
+          {"name": "HELM_DRIVER", "value": "secret"},
+          {"name": "CHART_NAMESPACE", "value": "kube-system"},
+          {"name": "CHART", "value": "cilium"},
+          {"name": "HELM_VERSION", "value": ""},
+          {"name": "TARGET_NAMESPACE", "value": "kube-system"},
+          {"name": "AUTH_PASS_CREDENTIALS", "value": "false"},
+          {"name": "HELM_PASSWORD", "value": "@SECRET@"},
+          {"name": "REPO_TOKEN", "valueFrom": {"secretKeyRef": {"name": "chart-auth", "key": "token"}}},
+          {"name": "NO_PROXY", "value": ".svc,.cluster.local,10.42.0.0/16,10.43.0.0/16"}
+        ]}]}}},
+      "status": {"startTime": "2026-10-01T09:16:02Z", "completionTime": "2026-10-01T09:17:41Z", "succeeded": 1, "failed": 2, "ready": 0}
+    },
+    {
+      "metadata": {"name": "helm-install-argocd", "namespace": "kube-system", "creationTimestamp": "2026-10-01T09:16:03Z",
+        "labels": {"helmcharts.helm.cattle.io/chart": "argocd"}},
+      "spec": {"backoffLimit": 1000, "template": {"spec": {"containers": [{
+        "name": "helm", "image": "rancher/klipper-helm:v0.9.8-build20250709", "args": ["install"],
+        "env": [
+          {"name": "NAME", "value": "argocd"},
+          {"name": "VERSION", "value": "10.9.2"},
+          {"name": "REPO", "value": "https://argoproj.github.io/argo-helm"},
+          {"name": "HELM_DRIVER", "value": "secret"},
+          {"name": "CHART_NAMESPACE", "value": "kube-system"},
+          {"name": "CHART", "value": "argo-cd"},
+          {"name": "TARGET_NAMESPACE", "value": "argocd"},
+          {"name": "HELM_PASSWORD", "value": "@SECRET@"}
+        ]}]}}},
+      "status": {"startTime": "2026-10-01T09:16:03Z", "active": 1, "ready": 1}
+    },
+    {
+      "metadata": {"name": "helm-delete-traefik", "namespace": "kube-system", "creationTimestamp": "2026-10-01T09:16:04Z"},
+      "spec": {"template": {"spec": {"containers": [{"name": "helm", "image": "rancher/klipper-helm:v0.9.8-build20250709",
+        "env": [{"name": "NAME", "value": "traefik"}, {"name": "VERSION", "value": "27.0.201"}]}]}}},
+      "status": {"startTime": "2026-10-01T09:16:04Z", "completionTime": "2026-10-01T09:16:20Z", "succeeded": 1}
+    },
+    {
+      "metadata": {"name": "local-path-cleanup", "namespace": "kube-system", "creationTimestamp": "2026-10-01T09:16:05Z"},
+      "spec": {"template": {"spec": {"containers": [{"name": "cleanup", "image": "busybox:1.36", "env": [{"name": "NAME", "value": "cleanup"}]}]}}},
+      "status": {"startTime": "2026-10-01T09:16:05Z", "completionTime": "2026-10-01T09:16:09Z", "succeeded": 1}
+    }
+  ]
+}

@@ -1,0 +1,131 @@
+# Module CI: the repository's one workflow.
+#
+# Every event runs the Go suites, the Kyverno policy tests and the three k3s
+# proofs, each of which boots a real k3s node: localpv-lvm binds a claim on a
+# dedicated seed's storage, openbao-boot initialises OpenBao and writes the
+# GitHub App's key from the recorded user data, and node-agent-reads reads the
+# cluster with the node agent's service account.
+#
+# Once all of them pass on a push to main, the release job tags the commit
+# with the version .github/version names, unless that tag exists already. A
+# block takes a change only by requiring a newer tag in its go.mod.
+#
+# The node agent's image is built and signed by hcloud-k3s-cluster's CI, from
+# the release that block requires, since the admission policy trusts that
+# workflow's signature.
+name: Module CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: cluster
+
+jobs:
+  test:
+    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.8'
+
+      - name: go vet
+        working-directory: .
+        run: go vet ./...
+
+      - name: go test
+        working-directory: .
+        run: go test -race ./...
+
+  kyverno-test:
+    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the Kyverno CLI v1.19.1
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o kyverno-cli.tar.gz \
+            https://github.com/kyverno/kyverno/releases/download/v1.19.1/kyverno-cli_v1.19.1_linux_x86_64.tar.gz
+          echo "b38228f367fc0fdc2b08f4c83ea50ac5f16c60ff8d62d76a66157c33c47b70ae  kyverno-cli.tar.gz" | sha256sum -c -
+          tar -xzf kyverno-cli.tar.gz kyverno
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      # The signature test reads ghcr.io/mitstack-eu/mitstack-node-agent, which any client pulls with no login.
+      - name: Test the admission policies
+        run: kyverno test admission/tests
+
+  localpv-lvm:
+    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prove LocalPV-LVM on k3s over a loop-backed vg0
+        run: sudo scripts/ci/localpv-lvm-proof.sh
+
+  openbao-boot:
+    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prove OpenBao's init and the App key's writer on k3s
+        run: sudo scripts/ci/openbao-boot-proof.sh
+
+  node-agent-reads:
+    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prove the node agent reads the cluster with its service account on k3s
+        run: sudo scripts/ci/node-agent-proof.sh
+
+  release:
+    needs: [test, kyverno-test, localpv-lvm, openbao-boot, node-agent-reads]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Tag the commit with the version .github/version names
+        working-directory: .
+        run: |
+          set -euo pipefail
+          tag="v$(cat .github/version)"
+          case "$tag" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::.github/version holds $tag, want MAJOR.MINOR.PATCH"; exit 1 ;;
+          esac
+          if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+            echo "$tag exists at $(git rev-list -n 1 "$tag"), so nothing is released"
+            exit 0
+          fi
+          git tag "$tag" "$GITHUB_SHA"
+          git push origin "refs/tags/$tag"
+          echo "released $tag at $GITHUB_SHA"

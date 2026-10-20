@@ -1,0 +1,2 @@
+Warning: existing pods in namespace "argocd" violate the new PodSecurity enforce level "restricted:latest"
+Warning: argocd-application-controller-0 (and 6 other pods): allowPrivilegeEscalation != false, unrestricted capabilities, runAsNonRoot != true, seccompProfile

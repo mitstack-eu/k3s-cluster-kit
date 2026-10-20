@@ -1,0 +1,14 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Value
+metadata:
+  name: values
+namespaceSelector:
+- name: app-s4338-a1
+  labels:
+    kubernetes.io/metadata.name: app-s4338-a1
+    mitstack.dev/app: s4338-a1
+    mitstack.dev/subscription: sub_5d77bef5b63b
+    pod-security.kubernetes.io/enforce: restricted
+- name: cert-manager
+  labels:
+    kubernetes.io/metadata.name: cert-manager

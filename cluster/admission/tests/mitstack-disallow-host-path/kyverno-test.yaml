@@ -1,0 +1,22 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: mitstack-disallow-host-path
+policies:
+- ../../policies/mitstack-disallow-host-path.yaml
+resources:
+- accepted.yaml
+- refused.yaml
+results:
+- isValidatingPolicy: true
+  policy: mitstack-disallow-host-path
+  kind: Deployment
+  resources:
+  - accepted-disallow-host-path
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-disallow-host-path
+  kind: Deployment
+  resources:
+  - refused-disallow-host-path
+  result: fail

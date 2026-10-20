@@ -1,0 +1,33 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: mitstack-restrict-image-registries
+  annotations:
+    mitstack.dev/standard: CIS Kubernetes Benchmark 5.5.1
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, daemonsets, jobs, cronjobs, replicasets]
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["pods"]
+    namespaceSelector:
+      matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: NotIn
+        values: [kube-system, kube-public, kube-node-lease, argocd, kyverno, traefik, cert-manager, system-upgrade, mitstack-metadata-probe, openbao, external-secrets, cnpg-system]
+  variables:
+  - name: containers
+    expression: "object.spec.containers + object.spec.?initContainers.orValue([]) + object.spec.?ephemeralContainers.orValue([])"
+  - name: registries
+    expression: "['ghcr.io/mitstack-eu/', '839001574838.dkr.ecr.eu-central-1.amazonaws.com/']"
+  - name: pinnedImages
+    expression: "['quay.io/jetstack/cert-manager-acmesolver@sha256:699b40d622211ab7accad8a21b04c5fbaa1841ef7a12621e8de492dbe27b2503', 'ghcr.io/cloudnative-pg/cloudnative-pg:1.30.1@sha256:923c267ec29636db3bee20f993d0ec4973fa22998e1adad37da79e4d32b5bc07', 'ghcr.io/cloudnative-pg/postgresql:16.15-system-trixie@sha256:8ca5699981c25db72e549e9fa69561bac233df15b9b1e3a6282847b0629bb5ea']"
+  validations:
+  - expression: "variables.containers.all(c, c.image in variables.pinnedImages || variables.registries.exists(r, c.image.startsWith(r)))"
+    message: "mitstack-restrict-image-registries: every container image must come from ghcr.io/mitstack-eu/ or 839001574838.dkr.ecr.eu-central-1.amazonaws.com/, or be an image pinnedImages names: cert-manager's ACME solver, the CloudNativePG operator or its Postgres 16 image"

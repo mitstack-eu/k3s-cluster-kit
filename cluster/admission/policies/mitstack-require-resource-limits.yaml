@@ -1,0 +1,29 @@
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: mitstack-require-resource-limits
+  annotations:
+    mitstack.dev/standard: NSA and CISA Kubernetes Hardening Guide
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  validationActions: [Deny]
+  autogen:
+    podControllers:
+      controllers: [deployments, statefulsets, daemonsets, jobs, cronjobs, replicasets]
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["pods"]
+    namespaceSelector:
+      matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: NotIn
+        values: [kube-system, kube-public, kube-node-lease, argocd, kyverno, traefik, cert-manager, system-upgrade, mitstack-metadata-probe, openbao, external-secrets, cnpg-system]
+  variables:
+  - name: containers
+    expression: "object.spec.containers + object.spec.?initContainers.orValue([])"
+  validations:
+  - expression: "variables.containers.all(c, c.?resources.?limits.?cpu.hasValue() && c.?resources.?limits.?memory.hasValue())"
+    message: "mitstack-require-resource-limits: every container and init container must set resources.limits.cpu and resources.limits.memory"

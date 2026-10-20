@@ -1,0 +1,909 @@
+{
+ "generationTime": "2026-10-08T17:23:32Z",
+ "clusterName": "default",
+ "summaryDetails": {
+  "controls": {
+   "C-0002": {
+    "controlID": "C-0002",
+    "name": "Prevent containers from allowing command execution",
+    "status": "failed",
+    "severity": "Medium",
+    "scoreFactor": 5,
+    "ResourceCounters": {
+     "passedResources": 71,
+     "failedResources": 1,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0005": {
+    "controlID": "C-0005",
+    "name": "API server insecure port is enabled",
+    "status": "passed",
+    "severity": "Critical",
+    "scoreFactor": 9,
+    "ResourceCounters": {
+     "passedResources": 0,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0012": {
+    "controlID": "C-0012",
+    "name": "Applications credentials in configuration files",
+    "status": "passed",
+    "severity": "High",
+    "scoreFactor": 8,
+    "ResourceCounters": {
+     "passedResources": 12,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0013": {
+    "controlID": "C-0013",
+    "name": "Non-root containers",
+    "status": "failed",
+    "severity": "Medium",
+    "scoreFactor": 6,
+    "ResourceCounters": {
+     "passedResources": 0,
+     "failedResources": 3,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0016": {
+    "controlID": "C-0016",
+    "name": "Allow privilege escalation",
+    "status": "failed",
+    "severity": "Medium",
+    "scoreFactor": 6,
+    "ResourceCounters": {
+     "passedResources": 2,
+     "failedResources": 1,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0017": {
+    "controlID": "C-0017",
+    "name": "Immutable container filesystem",
+    "status": "failed",
+    "severity": "Low",
+    "scoreFactor": 3,
+    "ResourceCounters": {
+     "passedResources": 2,
+     "failedResources": 1,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0030": {
+    "controlID": "C-0030",
+    "name": "Ingress and Egress blocked",
+    "status": "failed",
+    "severity": "Medium",
+    "scoreFactor": 6,
+    "ResourceCounters": {
+     "passedResources": 0,
+     "failedResources": 3,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0034": {
+    "controlID": "C-0034",
+    "name": "Automatic mapping of service account",
+    "status": "failed",
+    "severity": "Medium",
+    "scoreFactor": 6,
+    "ResourceCounters": {
+     "passedResources": 44,
+     "failedResources": 3,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0035": {
+    "controlID": "C-0035",
+    "name": "Administrative Roles",
+    "status": "failed",
+    "severity": "Medium",
+    "scoreFactor": 6,
+    "ResourceCounters": {
+     "passedResources": 71,
+     "failedResources": 1,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0038": {
+    "controlID": "C-0038",
+    "name": "Host PID/IPC privileges",
+    "status": "passed",
+    "severity": "High",
+    "scoreFactor": 7,
+    "ResourceCounters": {
+     "passedResources": 3,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0041": {
+    "controlID": "C-0041",
+    "name": "HostNetwork access",
+    "status": "passed",
+    "severity": "High",
+    "scoreFactor": 7,
+    "ResourceCounters": {
+     "passedResources": 3,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0044": {
+    "controlID": "C-0044",
+    "name": "Container hostPort",
+    "status": "passed",
+    "severity": "Medium",
+    "scoreFactor": 4,
+    "ResourceCounters": {
+     "passedResources": 3,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0046": {
+    "controlID": "C-0046",
+    "name": "Insecure capabilities",
+    "status": "passed",
+    "severity": "High",
+    "scoreFactor": 7,
+    "ResourceCounters": {
+     "passedResources": 3,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0054": {
+    "controlID": "C-0054",
+    "name": "Cluster internal networking",
+    "status": "failed",
+    "severity": "Medium",
+    "scoreFactor": 4,
+    "ResourceCounters": {
+     "passedResources": 0,
+     "failedResources": 4,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0055": {
+    "controlID": "C-0055",
+    "name": "Linux hardening",
+    "status": "failed",
+    "severity": "Medium",
+    "scoreFactor": 4,
+    "ResourceCounters": {
+     "passedResources": 0,
+     "failedResources": 3,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0057": {
+    "controlID": "C-0057",
+    "name": "Privileged container",
+    "status": "passed",
+    "severity": "High",
+    "scoreFactor": 8,
+    "ResourceCounters": {
+     "passedResources": 3,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0058": {
+    "controlID": "C-0058",
+    "name": "CVE-2021-25741 - Using symlink for arbitrary host file system access.",
+    "status": "passed",
+    "severity": "Medium",
+    "scoreFactor": 6,
+    "ResourceCounters": {
+     "passedResources": 0,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0059": {
+    "controlID": "C-0059",
+    "name": "CVE-2021-25742-nginx-ingress-snippet-annotation-vulnerability",
+    "status": "passed",
+    "severity": "High",
+    "scoreFactor": 8,
+    "ResourceCounters": {
+     "passedResources": 0,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0066": {
+    "controlID": "C-0066",
+    "name": "Secret/etcd encryption enabled",
+    "status": "skipped",
+    "severity": "Medium",
+    "scoreFactor": 6,
+    "ResourceCounters": {
+     "passedResources": 0,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0067": {
+    "controlID": "C-0067",
+    "name": "Audit logs enabled",
+    "status": "skipped",
+    "severity": "Medium",
+    "scoreFactor": 5,
+    "ResourceCounters": {
+     "passedResources": 0,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0068": {
+    "controlID": "C-0068",
+    "name": "PSP enabled",
+    "status": "skipped",
+    "severity": "Low",
+    "scoreFactor": 1,
+    "ResourceCounters": {
+     "passedResources": 0,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0069": {
+    "controlID": "C-0069",
+    "name": "Disable anonymous access to Kubelet service",
+    "status": "skipped",
+    "severity": "Critical",
+    "scoreFactor": 10,
+    "ResourceCounters": {
+     "passedResources": 0,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0070": {
+    "controlID": "C-0070",
+    "name": "Enforce Kubelet client TLS authentication",
+    "status": "skipped",
+    "severity": "Critical",
+    "scoreFactor": 9,
+    "ResourceCounters": {
+     "passedResources": 0,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0270": {
+    "controlID": "C-0270",
+    "name": "Ensure CPU limits are set",
+    "status": "failed",
+    "severity": "High",
+    "scoreFactor": 8,
+    "ResourceCounters": {
+     "passedResources": 0,
+     "failedResources": 3,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0271": {
+    "controlID": "C-0271",
+    "name": "Ensure memory limits are set",
+    "status": "failed",
+    "severity": "High",
+    "scoreFactor": 8,
+    "ResourceCounters": {
+     "passedResources": 1,
+     "failedResources": 2,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   },
+   "C-0292": {
+    "controlID": "C-0292",
+    "name": "Nginx Ingress Controller End of Life",
+    "status": "passed",
+    "severity": "Medium",
+    "scoreFactor": 6,
+    "ResourceCounters": {
+     "passedResources": 3,
+     "failedResources": 0,
+     "skippedResources": 0,
+     "excludedResources": 0
+    }
+   }
+  },
+  "status": "failed",
+  "controlsSeverityCounters": {
+   "criticalSeverity": 0,
+   "highSeverity": 2,
+   "mediumSeverity": 8,
+   "lowSeverity": 1
+  },
+  "resourcesSeverityCounters": {
+   "criticalSeverity": 0,
+   "highSeverity": 5,
+   "mediumSeverity": 19,
+   "lowSeverity": 1
+  },
+  "ResourceCounters": {
+   "passedResources": 124,
+   "failedResources": 8,
+   "skippedResources": 0,
+   "excludedResources": 0
+  },
+  "score": 9.957924,
+  "complianceScore": 56.057915
+ },
+ "metadata": {
+  "scanMetadata": {
+   "targetType": "Framework",
+   "kubescapeVersion": "v4.0.15",
+   "formatVersion": "v2",
+   "targetNames": [
+    "nsa"
+   ]
+  }
+ },
+ "results": [
+  {
+   "resourceID": "/v1//Namespace/default",
+   "controls": [
+    {
+     "controlID": "C-0054",
+     "name": "Cluster internal networking",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    }
+   ]
+  },
+  {
+   "resourceID": "/v1//Namespace/kube-node-lease",
+   "controls": [
+    {
+     "controlID": "C-0054",
+     "name": "Cluster internal networking",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    }
+   ]
+  },
+  {
+   "resourceID": "/v1//Namespace/kube-public",
+   "controls": [
+    {
+     "controlID": "C-0054",
+     "name": "Cluster internal networking",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    }
+   ]
+  },
+  {
+   "resourceID": "/v1//Namespace/kube-system",
+   "controls": [
+    {
+     "controlID": "C-0054",
+     "name": "Cluster internal networking",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    }
+   ]
+  },
+  {
+   "resourceID": "apps/v1/kube-system/Deployment/coredns",
+   "controls": [
+    {
+     "controlID": "C-0012",
+     "name": "Applications credentials in configuration files",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0013",
+     "name": "Non-root containers",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0016",
+     "name": "Allow privilege escalation",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0017",
+     "name": "Immutable container filesystem",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "Low"
+    },
+    {
+     "controlID": "C-0030",
+     "name": "Ingress and Egress blocked",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0034",
+     "name": "Automatic mapping of service account",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0038",
+     "name": "Host PID/IPC privileges",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0041",
+     "name": "HostNetwork access",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0044",
+     "name": "Container hostPort",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0046",
+     "name": "Insecure capabilities",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0055",
+     "name": "Linux hardening",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0057",
+     "name": "Privileged container",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0270",
+     "name": "Ensure CPU limits are set",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0271",
+     "name": "Ensure memory limits are set",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0292",
+     "name": "Nginx Ingress Controller End of Life",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "Medium"
+    }
+   ]
+  },
+  {
+   "resourceID": "apps/v1/kube-system/Deployment/local-path-provisioner",
+   "controls": [
+    {
+     "controlID": "C-0012",
+     "name": "Applications credentials in configuration files",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0013",
+     "name": "Non-root containers",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0016",
+     "name": "Allow privilege escalation",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0017",
+     "name": "Immutable container filesystem",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Low"
+    },
+    {
+     "controlID": "C-0030",
+     "name": "Ingress and Egress blocked",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0034",
+     "name": "Automatic mapping of service account",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0038",
+     "name": "Host PID/IPC privileges",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0041",
+     "name": "HostNetwork access",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0044",
+     "name": "Container hostPort",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0046",
+     "name": "Insecure capabilities",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0055",
+     "name": "Linux hardening",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0057",
+     "name": "Privileged container",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0270",
+     "name": "Ensure CPU limits are set",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0271",
+     "name": "Ensure memory limits are set",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0292",
+     "name": "Nginx Ingress Controller End of Life",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "Medium"
+    }
+   ]
+  },
+  {
+   "resourceID": "apps/v1/kube-system/Deployment/metrics-server",
+   "controls": [
+    {
+     "controlID": "C-0012",
+     "name": "Applications credentials in configuration files",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0013",
+     "name": "Non-root containers",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0016",
+     "name": "Allow privilege escalation",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0017",
+     "name": "Immutable container filesystem",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "Low"
+    },
+    {
+     "controlID": "C-0030",
+     "name": "Ingress and Egress blocked",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0034",
+     "name": "Automatic mapping of service account",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0038",
+     "name": "Host PID/IPC privileges",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0041",
+     "name": "HostNetwork access",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0044",
+     "name": "Container hostPort",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0046",
+     "name": "Insecure capabilities",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0055",
+     "name": "Linux hardening",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0057",
+     "name": "Privileged container",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0270",
+     "name": "Ensure CPU limits are set",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0271",
+     "name": "Ensure memory limits are set",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "High"
+    },
+    {
+     "controlID": "C-0292",
+     "name": "Nginx Ingress Controller End of Life",
+     "status": {
+      "status": "passed"
+     },
+     "severity": "Medium"
+    }
+   ]
+  },
+  {
+   "resourceID": "rbac.authorization.k8s.io//Group/system:masters/rbac.authorization.k8s.io/v1//ClusterRole/cluster-admin/rbac.authorization.k8s.io/v1//ClusterRoleBinding/cluster-admin",
+   "controls": [
+    {
+     "controlID": "C-0002",
+     "name": "Prevent containers from allowing command execution",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    },
+    {
+     "controlID": "C-0035",
+     "name": "Administrative Roles",
+     "status": {
+      "status": "failed"
+     },
+     "severity": "Medium"
+    }
+   ]
+  }
+ ],
+ "resources": [
+  {
+   "resourceID": "/v1//Namespace/default",
+   "object": {
+    "kind": "Namespace",
+    "apiVersion": "v1",
+    "metadata": {
+     "name": "default"
+    }
+   }
+  },
+  {
+   "resourceID": "/v1//Namespace/kube-node-lease",
+   "object": {
+    "kind": "Namespace",
+    "apiVersion": "v1",
+    "metadata": {
+     "name": "kube-node-lease"
+    }
+   }
+  },
+  {
+   "resourceID": "/v1//Namespace/kube-public",
+   "object": {
+    "kind": "Namespace",
+    "apiVersion": "v1",
+    "metadata": {
+     "name": "kube-public"
+    }
+   }
+  },
+  {
+   "resourceID": "/v1//Namespace/kube-system",
+   "object": {
+    "kind": "Namespace",
+    "apiVersion": "v1",
+    "metadata": {
+     "name": "kube-system"
+    }
+   }
+  },
+  {
+   "resourceID": "apps/v1/kube-system/Deployment/coredns",
+   "object": {
+    "kind": "Deployment",
+    "apiVersion": "apps/v1",
+    "metadata": {
+     "name": "coredns",
+     "namespace": "kube-system"
+    }
+   }
+  },
+  {
+   "resourceID": "apps/v1/kube-system/Deployment/local-path-provisioner",
+   "object": {
+    "kind": "Deployment",
+    "apiVersion": "apps/v1",
+    "metadata": {
+     "name": "local-path-provisioner",
+     "namespace": "kube-system"
+    }
+   }
+  },
+  {
+   "resourceID": "apps/v1/kube-system/Deployment/metrics-server",
+   "object": {
+    "kind": "Deployment",
+    "apiVersion": "apps/v1",
+    "metadata": {
+     "name": "metrics-server",
+     "namespace": "kube-system"
+    }
+   }
+  },
+  {
+   "resourceID": "rbac.authorization.k8s.io//Group/system:masters/rbac.authorization.k8s.io/v1//ClusterRole/cluster-admin/rbac.authorization.k8s.io/v1//ClusterRoleBinding/cluster-admin",
+   "object": {
+    "kind": "Group",
+    "name": "system:masters"
+   }
+  }
+ ]
+}

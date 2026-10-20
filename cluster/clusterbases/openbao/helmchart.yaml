@@ -1,0 +1,97 @@
+# OpenBao reads its certificate only at start and on SIGHUP, so tls-reload signals it once the kubelet writes a renewal.
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: openbao
+  namespace: kube-system
+spec:
+  chart: openbao
+  repo: https://openbao.github.io/openbao-helm
+  version: 0.30.2
+  targetNamespace: openbao
+  valuesContent: |
+    global:
+      tlsDisable: false
+    injector:
+      enabled: false
+    server:
+      image:
+        tag: 2.7.1@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf
+      shareProcessNamespace: true
+      extraEnvironmentVars:
+        BAO_CACERT: /openbao/tls/ca.crt
+      statefulSet:
+        securityContext:
+          pod:
+            runAsNonRoot: true
+            runAsUser: 100
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          container:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+      dataStorage:
+        size: 10Gi
+        storageClass: openbao-local
+      volumes:
+        - name: seal-key
+          secret:
+            secretName: openbao-seal-key
+            defaultMode: 0440
+        - name: tls
+          secret:
+            secretName: openbao-tls
+            defaultMode: 0440
+      volumeMounts:
+        - name: seal-key
+          mountPath: /openbao/seal
+          readOnly: true
+        - name: tls
+          mountPath: /openbao/tls
+          readOnly: true
+      extraContainers:
+        - name: tls-reload
+          image: quay.io/openbao/openbao:2.7.1@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf
+          command: [/bin/sh, -c]
+          args:
+            - |
+              served=$(sha256sum /openbao/tls/tls.crt)
+              while sleep 30; do
+                current=$(sha256sum /openbao/tls/tls.crt)
+                if [ "$current" != "$served" ] && kill -HUP $(pidof bao); then
+                  served=$current
+                  echo "tls-reload: sent SIGHUP for the renewed certificate"
+                fi
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 1m, memory: 8Mi}
+            limits: {cpu: 20m, memory: 16Mi}
+          volumeMounts:
+            - name: tls
+              mountPath: /openbao/tls
+              readOnly: true
+      standalone:
+        config: |
+          ui = false
+          listener "tcp" {
+            address = "[::]:8200"
+            cluster_address = "[::]:8201"
+            tls_cert_file = "/openbao/tls/tls.crt"
+            tls_key_file = "/openbao/tls/tls.key"
+            tls_min_version = "tls13"
+          }
+          storage "pebbledb" {
+            path = "/openbao/data/pebbledb"
+          }
+          seal "static" {
+            current_key_id = "mitstack-seal-1"
+            current_key = "file:///openbao/seal/key"
+          }

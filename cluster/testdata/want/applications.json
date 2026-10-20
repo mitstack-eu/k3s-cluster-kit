@@ -1,0 +1,130 @@
+[
+  {
+    "conditions": [],
+    "healthStatus": "Healthy",
+    "history": [
+      {
+        "chart": null,
+        "deployedAt": "2026-10-01T09:22:00Z",
+        "id": 2,
+        "revision": "9f1c2e7d00000000000000000000000000000002",
+        "targetRevision": "HEAD"
+      },
+      {
+        "chart": null,
+        "deployedAt": "2026-10-01T09:23:00Z",
+        "id": 3,
+        "revision": "9f1c2e7d00000000000000000000000000000003",
+        "targetRevision": "HEAD"
+      },
+      {
+        "chart": null,
+        "deployedAt": "2026-10-01T09:24:00Z",
+        "id": 4,
+        "revision": "9f1c2e7d00000000000000000000000000000004",
+        "targetRevision": "HEAD"
+      },
+      {
+        "chart": null,
+        "deployedAt": "2026-10-01T09:25:00Z",
+        "id": 5,
+        "revision": "9f1c2e7d00000000000000000000000000000005",
+        "targetRevision": "HEAD"
+      },
+      {
+        "chart": null,
+        "deployedAt": "2026-10-01T09:26:00Z",
+        "id": 6,
+        "revision": "9f1c2e7d00000000000000000000000000000006",
+        "targetRevision": "HEAD"
+      },
+      {
+        "chart": null,
+        "deployedAt": "2026-10-01T09:27:00Z",
+        "id": 7,
+        "revision": "9f1c2e7d00000000000000000000000000000007",
+        "targetRevision": "HEAD"
+      },
+      {
+        "chart": null,
+        "deployedAt": "2026-10-01T09:28:00Z",
+        "id": 8,
+        "revision": "9f1c2e7d00000000000000000000000000000008",
+        "targetRevision": "HEAD"
+      },
+      {
+        "chart": null,
+        "deployedAt": "2026-10-01T09:29:00Z",
+        "id": 9,
+        "revision": "9f1c2e7d00000000000000000000000000000009",
+        "targetRevision": "HEAD"
+      },
+      {
+        "chart": null,
+        "deployedAt": "2026-10-01T09:30:00Z",
+        "id": 10,
+        "revision": "9f1c2e7d0000000000000000000000000000000a",
+        "targetRevision": "HEAD"
+      },
+      {
+        "chart": null,
+        "deployedAt": "2026-10-01T09:31:00Z",
+        "id": 11,
+        "revision": "9f1c2e7d0000000000000000000000000000000b",
+        "targetRevision": "HEAD"
+      }
+    ],
+    "name": "cluster-root",
+    "operationPhase": "Succeeded",
+    "reconciledAt": "2026-10-01T09:45:12Z",
+    "syncRevision": "9f1c2e7d0000000000000000000000000000000b",
+    "syncStatus": "Synced"
+  },
+  {
+    "conditions": [],
+    "healthStatus": "Progressing",
+    "history": [
+      {
+        "chart": "argo-cd",
+        "deployedAt": "2026-10-01T09:33:00Z",
+        "id": 0,
+        "revision": "10.9.2",
+        "targetRevision": "10.9.2"
+      }
+    ],
+    "name": "argocd",
+    "operationPhase": "Running",
+    "reconciledAt": "2026-10-01T09:45:20Z",
+    "syncRevision": "10.9.2",
+    "syncStatus": "OutOfSync"
+  },
+  {
+    "conditions": [],
+    "healthStatus": null,
+    "history": [],
+    "name": "cilium",
+    "operationPhase": null,
+    "reconciledAt": null,
+    "syncRevision": null,
+    "syncStatus": null
+  },
+  {
+    "conditions": [
+      {
+        "message": "application destination server 'https://kubernetes.default.svc' and namespace 'kube-system' do not match any of the allowed destinations in project 'slice-orbitdemo'",
+        "type": "InvalidSpecError"
+      },
+      {
+        "message": "rpc error: code = Unknown desc = failed to generate manifest for source 1 of 1: helm template failed: nil pointer evaluating interface; helm template failed: nil pointer evaluating interface; helm template failed: nil pointer evaluating interface; helm template failed: nil pointer evaluating interface; helm template failed: nil pointer evaluating interface; helm template failed: nil pointer evaluating interface; helm template failed: nil pointer evaluating interface; helm template failed: nil pointer evalua",
+        "type": "ComparisonError"
+      }
+    ],
+    "healthStatus": null,
+    "history": [],
+    "name": "slice-orbitdemo-refused",
+    "operationPhase": null,
+    "reconciledAt": null,
+    "syncRevision": null,
+    "syncStatus": "Unknown"
+  }
+]

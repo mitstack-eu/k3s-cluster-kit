@@ -1,0 +1,18 @@
+# The cluster's default storage class: each claim becomes its own logical
+# volume of the claim's size in volume group vg0, the group the
+# hcloud-k3s-cluster block's install leaves free beside the root volume.
+# WaitForFirstConsumer binds a claim only once a pod that uses it is scheduled.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openebs-lvm
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: local.csi.openebs.io
+parameters:
+  storage: lvm
+  volgroup: vg0
+  fsType: ext4
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true

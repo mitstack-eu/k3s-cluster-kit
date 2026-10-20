@@ -1,0 +1,6 @@
+[
+  {"namespace": "orbitdemo", "name": "mitstack-default-deny", "podSelector": {}, "policyTypes": ["Ingress", "Egress"], "ingressRules": 0, "egressRules": 0, "managedBy": "kyverno"},
+  {"namespace": "handmade", "name": "mitstack-default-deny", "podSelector": {}, "policyTypes": ["Ingress"], "ingressRules": 1, "egressRules": 0, "managedBy": null},
+  {"namespace": "selective", "name": "mitstack-default-deny", "podSelector": {"matchLabels": {"app": "web"}}, "policyTypes": ["Ingress", "Egress"], "ingressRules": 0, "egressRules": 2, "managedBy": null},
+  {"namespace": "bare", "name": "mitstack-default-deny", "podSelector": {}, "policyTypes": [], "ingressRules": 0, "egressRules": 0, "managedBy": null}
+]

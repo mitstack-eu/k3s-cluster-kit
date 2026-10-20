@@ -1,0 +1,333 @@
+{
+  "apiVersion": "v1",
+  "items": [
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "web",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "web",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "StatefulSet",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "db",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "db",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "DaemonSet",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "log-agent",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "log-agent",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "web-6d4cf56db6-x2x8k",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "web-6d4cf56db6-x2x8k",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "web",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "web",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "Ingress",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "web",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "web",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "data": {
+        "APP_ENV": "production"
+      },
+      "kind": "ConfigMap",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "web-config",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "web-config",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "data": {
+        "DATABASE_PASSWORD": "@SECRET_B64@"
+      },
+      "kind": "Secret",
+      "metadata": {
+        "annotations": {
+          "mitstack.dev/served": "@SECRET@"
+        },
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "web-env",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "web-env",
+        "namespace": "demo"
+      },
+      "type": "Opaque"
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ServiceAccount",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "web",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "web",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "Role",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "web",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "web",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "rbac.authorization.k8s.io/v1",
+      "kind": "RoleBinding",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "web",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "web",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "networking.k8s.io/v1",
+      "kind": "NetworkPolicy",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "default-deny",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "default-deny",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "ResourceQuota",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "quota",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "quota",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "LimitRange",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "limits",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "limits",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "data",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "data",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "cert-manager.io/v1",
+      "kind": "Certificate",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "web-tls",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "web-tls",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "argoproj.io/v1alpha1",
+      "kind": "Application",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "demo",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "demo",
+        "namespace": "argocd"
+      }
+    },
+    {
+      "apiVersion": "argoproj.io/v1alpha1",
+      "kind": "AppProject",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "demo",
+          "mitstack.dev/subscription": "7b1e4c2a-9d3f-4e8b-a6c5-1f2e3d4c5b6a"
+        },
+        "name": "demo",
+        "namespace": "argocd"
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "shop",
+          "mitstack.dev/subscription": "c4d5e6f7-0a1b-4c2d-8e3f-9a0b1c2d3e4f"
+        },
+        "name": "shop",
+        "namespace": "shop"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "data": {
+        "API_KEY": "@SECRET_B64@"
+      },
+      "kind": "Secret",
+      "metadata": {
+        "annotations": {
+          "mitstack.dev/served": "@SECRET@"
+        },
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "shop-env",
+          "mitstack.dev/subscription": "c4d5e6f7-0a1b-4c2d-8e3f-9a0b1c2d3e4f"
+        },
+        "name": "shop-env",
+        "namespace": "shop"
+      },
+      "type": "Opaque"
+    },
+    {
+      "apiVersion": "v1",
+      "data": {
+        "tls.crt": "@SECRET_B64@",
+        "tls.key": "@SECRET_B64@"
+      },
+      "kind": "Secret",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "web-tls"
+        },
+        "name": "web-tls",
+        "namespace": "demo"
+      },
+      "type": "kubernetes.io/tls"
+    },
+    {
+      "apiVersion": "v1",
+      "data": {
+        "ca.crt": "-----BEGIN CERTIFICATE-----"
+      },
+      "kind": "ConfigMap",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "kube-root-ca.crt"
+        },
+        "name": "kube-root-ca.crt",
+        "namespace": "demo"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "data": {
+        "Corefile": ".:53 {}"
+      },
+      "kind": "ConfigMap",
+      "metadata": {
+        "creationTimestamp": "2026-10-01T09:16:02Z",
+        "labels": {
+          "app.kubernetes.io/name": "coredns"
+        },
+        "name": "coredns",
+        "namespace": "kube-system"
+      }
+    }
+  ],
+  "kind": "List",
+  "metadata": {
+    "resourceVersion": ""
+  }
+}

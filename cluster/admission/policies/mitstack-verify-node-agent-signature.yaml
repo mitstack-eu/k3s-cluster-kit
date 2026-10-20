@@ -1,0 +1,35 @@
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: mitstack-verify-node-agent-signature
+  annotations:
+    mitstack.dev/standard: CIS Kubernetes Benchmark 5.5.1
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  validationActions: [Deny]
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: [""]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["pods"]
+    namespaceSelector:
+      matchExpressions:
+      - key: kubernetes.io/metadata.name
+        operator: In
+        values: [mitstack-node]
+  matchImageReferences:
+  - glob: "*"
+  attestors:
+  - name: blockci
+    cosign:
+      keyless:
+        identities:
+        - issuer: https://token.actions.githubusercontent.com
+          subject: https://github.com/mitstack-eu/hcloud-k3s-cluster/.github/workflows/ci.yml@refs/heads/main
+      ctlog:
+        url: https://rekor.sigstore.dev
+  validations:
+  - expression: "images.containers.map(image, verifyImageSignatures(image, [attestors.blockci])).all(e, e > 0)"
+    message: "mitstack-verify-node-agent-signature: every image in mitstack-node must carry the signature of the hcloud-k3s-cluster block's CI on main"

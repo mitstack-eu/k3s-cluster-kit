@@ -1,0 +1,354 @@
+#cloud-config
+write_files:
+  - path: /etc/rancher/k3s/config.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      cluster-init: true
+      disable:
+        - local-storage
+        - traefik
+      flannel-backend: none
+      disable-network-policy: true
+      disable-kube-proxy: false
+      cluster-cidr: 10.42.0.0/16
+      service-cidr: 10.43.0.0/16
+      cluster-dns: 10.43.0.10
+      kubelet-arg:
+        - cloud-provider=external
+        - volume-plugin-dir=/var/lib/kubelet/volumeplugins
+        - kube-reserved=cpu=250m,memory=1500Mi,ephemeral-storage=1Gi
+        - system-reserved=cpu=250m,memory=300Mi
+      kube-controller-manager-arg:
+        - flex-volume-plugin-dir=/var/lib/kubelet/volumeplugins
+      kube-apiserver-arg:
+        - service-account-issuer=https://mitstack-oidc-abcdefghijklmnopqrstuvwxyz.s3.eu-central-1.amazonaws.com/abcd2345-6f7a-4b2c-9d3e-5f6a7b2c3d4e
+        - service-account-jwks-uri=https://mitstack-oidc-abcdefghijklmnopqrstuvwxyz.s3.eu-central-1.amazonaws.com/abcd2345-6f7a-4b2c-9d3e-5f6a7b2c3d4e/openid/v1/jwks
+      secrets-encryption: true
+  - path: /var/lib/rancher/k3s/server/manifests/cilium.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      apiVersion: helm.cattle.io/v1
+      kind: HelmChart
+      metadata:
+        name: cilium
+        namespace: kube-system
+      spec:
+        chart: cilium
+        repo: https://helm.cilium.io/
+        version: 1.19.3
+        targetNamespace: kube-system
+        bootstrap: true
+        valuesContent: |
+          ipam:
+            mode: kubernetes
+          k8s:
+            requireIPv4PodCIDR: true
+          ipv4:
+            enabled: true
+          ipv6:
+            enabled: false
+          kubeProxyReplacement: false
+          k8sServiceHost: "127.0.0.1"
+          k8sServicePort: "6444"
+          routingMode: "tunnel"
+          rollOutCiliumPods: true
+          endpointRoutes:
+            enabled: true
+          loadBalancer:
+            acceleration: "best-effort"
+          bpf:
+            masquerade: false
+          hubble:
+            relay:
+              enabled: true
+            ui:
+              enabled: true
+          MTU: 1450
+          operator:
+            replicas: 1
+            updateStrategy:
+              rollingUpdate:
+                maxSurge: 0
+                maxUnavailable: 1
+  - path: /var/lib/rancher/k3s/server/manifests/00-argocd-bootstrap.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: argocd
+      ---
+      apiVersion: helm.cattle.io/v1
+      kind: HelmChart
+      metadata:
+        name: argocd
+        namespace: kube-system
+      spec:
+        chart: argo-cd
+        repo: https://argoproj.github.io/argo-helm
+        version: 10.9.7
+        targetNamespace: argocd
+        valuesContent: |
+          dex: {enabled: false}
+          notifications: {cm: {create: false}, secret: {create: false}}
+          configs: {cm: {resource.customizations.health.argoproj.io_Application: 'local h=obj.status and obj.status.health or {} return {status=h.status or "Progressing",message=h.message or ""}'}}
+  - path: /var/lib/rancher/k3s/server/manifests/10-cluster-root.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      apiVersion: argoproj.io/v1alpha1
+      kind: Application
+      metadata:
+        name: cluster-root
+        namespace: argocd
+      spec:
+        project: default
+        source:
+          repoURL: https://github.com/acme/orbitdemo-cluster
+          path: cluster
+          targetRevision: HEAD
+        destination:
+          server: https://kubernetes.default.svc
+          namespace: argocd
+        syncPolicy:
+          automated:
+            prune: true
+            selfHeal: true
+  - path: /etc/mitstack/enrolment.env
+    owner: root:root
+    permissions: "0600"
+    content: |
+      MITSTACK_ENROLMENT_TOKEN=feedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface
+      MITSTACK_SUBSCRIPTION_ID=abcd2345-6f7a-4b2c-9d3e-5f6a7b2c3d4e
+      MITSTACK_REPOSITORY_URL=https://github.com/acme/orbitdemo-cluster
+  - path: /etc/mitstack/metadata-guard.nft
+    owner: root:root
+    permissions: "0600"
+    content: |
+      # Drops pod traffic to the Hetzner metadata service; loaded by mitstack-metadata-guard.service.
+      table inet mitstack_metadata_guard
+      delete table inet mitstack_metadata_guard
+      table inet mitstack_metadata_guard {
+      	chain forward {
+      		type filter hook forward priority -10; policy accept;
+      		ip daddr 169.254.169.254 counter drop
+      	}
+      }
+  - path: /var/lib/rancher/k3s/server/manifests/01-openbao-seal-key.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: openbao
+        labels:
+          pod-security.kubernetes.io/enforce: restricted
+          pod-security.kubernetes.io/enforce-version: latest
+      ---
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: openbao-seal-key
+        namespace: openbao
+      stringData:
+        key: 8d26485ad7c5645f1cf12799be1b701d3cccc5cfe56fe967dbf282199e1af1ce
+  - path: /var/lib/rancher/k3s/server/manifests/01-sealed-secrets-key.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: sealed-secrets-key
+        namespace: kube-system
+        labels:
+          sealedsecrets.bitnami.com/sealed-secrets-key: active
+      type: kubernetes.io/tls
+      stringData:
+        tls.crt: |
+          -----BEGIN CERTIFICATE-----
+          MIIEQTCCAqmgAwIBAgIUHUY/r8CLmjJNU8TG5wG9e5HqP4cwDQYJKoZIhvcNAQEL
+          BQAwMDEWMBQGA1UECgwNc2VhbGVkLXNlY3JldDEWMBQGA1UEAwwNc2VhbGVkLXNl
+          Y3JldDAeFw0yNjEwMTQxNjA5MjJaFw0zNjEwMTExNjA5MjJaMDAxFjAUBgNVBAoM
+          DXNlYWxlZC1zZWNyZXQxFjAUBgNVBAMMDXNlYWxlZC1zZWNyZXQwggGiMA0GCSqG
+          SIb3DQEBAQUAA4IBjwAwggGKAoIBgQCBdW9jJksDZ6AqNxPNXYlrQ9fl4XFP7XiB
+          +VOMRRAMDVCUm1FOGDBFgZGq3MZO9J1Gduvn3mL9tNad/hcgZGRbaeowFrBXuccm
+          4M4W0yuURXVhtdNPLh6uAhe1pMMvY44wdP+Pf5Uj6PPY7TVt5g97Pzlfrq8U0tTl
+          gyMf38dBL+846VI+y/9m3ea+k63Bx5jCSN4EDJTVgbUIF+rZZu3VXkoMs6DNAe1k
+          yE2/x0Ocz65qxwtapgmq/Xx+fsZVLjJjecnNrb5SxdQSWs08/qGpVIKgEEopZF5A
+          RlVDHcGfhssWJgtjbVkfshgFvNBCdx0f8Mr5z+QBgoCe6jmiK5A62tq6Ifu2KUfG
+          lEc45kv7bYZQL4SQTqp1hH6dSBpevcRn+LTkYX9jPdjx5b5UxUnM1CAemvy0oVgc
+          V+eqXPOiiw926wnYE2nOSeMESVRL9OnGMEe1JqNmTour+SZ9YpKpjbSHApPJw3I+
+          4LvFcxBLPR7Z28dpf0r8ZAjjP+HNDbsCAwEAAaNTMFEwHQYDVR0OBBYEFNKrzWJq
+          dribNBE06FIU9y6MHehDMB8GA1UdIwQYMBaAFNKrzWJqdribNBE06FIU9y6MHehD
+          MA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggGBAFOgVk+scEJvQsv4
+          5KinPgR7t7nv2HRxhWm8VOBCq7wpcwDzT+eEgpSw2SATe5uK0AEa9ubdE/NlI5Tf
+          Tv6gD8bzAiJGANPSVWBRq6g3PHstLK8u/uddvwie9D/F2T4vx3NvOHYJ5+ZqP7kF
+          GuX6WrmW7bxfQz79EqR+G8QGtsU7c3S5DuE6ABqeHwxw6DTHrx84Byc3cHq/Lb+0
+          iMsnQ/ggJ7Cc6Bi37wRABh0LkJaL1rBhQ43K1p4Iji8IAU/U5Ca3p8yOD1UOqadH
+          /k9lY7nVEpGB9yY+cQQwmH5uL37hsBCvLFfq7i2ZuxRApxegJ5Zd4leXk+Qa8ufC
+          78dKakxTQInwRw/LvoMAWEcV4aWlUjhy7fmTkRdhBtz/hF6fVyx3EVluj7UeeRcb
+          1nT4jOZGqA+aO4/3Rte70NRRTZvNc2Thl0BCibC9cDCGUjX7JaoCx0R5ClRtbdnv
+          UvMmxQmoPTDo57NmgFoF6YwWTSnOciTMA14gyLIHZeKItYllJw==
+          -----END CERTIFICATE-----
+        tls.key: |
+          -----BEGIN RSA PRIVATE KEY-----
+          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
+          -----END RSA PRIVATE KEY-----
+  - path: /var/lib/rancher/k3s/server/manifests/02-boot-components.yaml
+    owner: root:root
+    permissions: "0600"
+    encoding: gz+b64
+    content: |
+      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
+  - path: /var/lib/rancher/k3s/server/manifests/02-openbao-tls.yaml
+    owner: root:root
+    permissions: "0600"
+    encoding: gz+b64
+    content: |
+      H4sIAAAAAAAC/6xTzW7bPBC86yn2BaTPNvDFBYEebKeHoohT2EDvW2ots6ZIYpd0oBZ990KUFaNwHKdATgL3ZzScGWIw34jFeKdAE8eyRYcNcWX8f8dpcTCuVvBZJBEXLUWsMaIqABy2pMAHct/Rl0J2J6ZxVJ9aElCf+4UE0v1WP7fNcwp+/S7KsizeRGBFHM3OaIz0CguNr//dyGqhIHKiAkD7tvVunQEeA7klelgtMkfNFNeXyHVijJnnh/ndZLIvAAKbI0b6Ql2PD4C28WzivlXwaXW/XeSimJ+kYPb/XT6xjxnlq7dGdwrWdCTO5HqNN7QbkP4Svi9cFfzNIt508ZZ+GgduVxR6ZzejlVthuqQxLJ2dmk3vslFMjp6WtPNMCuazXKud9MsyXKocMarxK0d9vVNpmyQSV9ZrtL1/YVHXTCJnwOlsXk2qSTUtAJJgc+7UpjERLfQWYkxMp7oQH4kBU3yndC3sE3byz/F6wc3ISWJ16SnasMfR2WVytb35RNG5E82TIMiN13XVfwL7Hz2wdE6XPgxDsD2YcM/dJrlH92BEjGs2JD6xpo/5PT9nIteedR4iMpxevOXYOFCnIFqpNMcCICI34572bmeaBwwjTJ7VmEf/BAAA//88NzPvPwUAAA==
+  - path: /var/lib/rancher/k3s/server/manifests/03-cluster-repository.yaml
+    owner: root:root
+    permissions: "0600"
+    encoding: gz+b64
+    content: |
+      H4sIAAAAAAAC/6RUy27bOhDd+ysG3kuO49ybC+6C2weCokDQFN0UXYzpicVaIonhSI0R5N8LWrQethIgrTeSD6l5nHNm0JtvxME4q6BZznbGbhTcEzdG043WrrYyq0hwg4JqBmCxIgXOk12jy5C3Tm8SHDxqUpCwLMtmw+D0KMQWyyyQZpKQG7cYJIzYvTiml7NNpgmedLzp2TVmQxzfARqsS2lfAQJxQ6ygEPFBLRYpXH58hkar/y4vLtJ1jXejWPEne08K/nf2wWw/o+/wMRsau4Md7RVozDVLwjxKoWDXpL9NR/plQrCWos+4q9fEloRCjwFUUY+7NlJ3YXDOruyp6eEw0vMLPQxjvqDpm/R7nw5bHSck3Bop6nWG3r+qItMDUyhurRA3WCpYFrNYfueOrvZz35x1MgMQ5C0lI0wUcqwRIEtJPkXdPJsGhbId7RNPTJUTGhF3ULgtfzEKmuRm54nlJNopqVuyxCiOQz7NL5a+wCPLHw9pbrSmEL66HdkJonVZByHOmLwLRhzvXyUcvb99p2C+vFxd/fPv9XwGYGwQLMsWvl6ulsurq9X8IE4KaSgo+O54bWRDlctSzh9xDIkrE2JzybfaWSErQQETRk/2Nk/ERMq7SY2tj2ieUG3A/2vc/p1h38jjmXFXF9Wk/ybjAghVvkShY+PDgtpfiWsqR8ugLSGPD8/uZ+yvbTVr19VJiqHd+522NdIhNZf9lmwpz7WrFqgrWpzJ3X8WIpWxuccMD+bM5ODObhYwhF+ONwrmT0+QHw7h+XmeJvADu6qbQlezHg9aNyMne+tP5qj/+qWJOt2KE3r9DgAA//8t+e5AMwcAAA==
+  - path: /var/lib/rancher/k3s/server/manifests/04-openbao-boot.yaml
+    owner: root:root
+    permissions: "0600"
+    encoding: gz+b64
+    content: |
+      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
+  - path: /var/lib/rancher/k3s/server/manifests/05-cluster-repository.yaml.skip
+    owner: root:root
+    permissions: "0600"
+    content: ""
+  - path: /etc/systemd/system/mitstack-enrol.timer
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Retry enrolment with the mitstack platform until it answers
+
+      [Timer]
+      Unit=mitstack-enrol.service
+      OnBootSec=1min
+      OnUnitInactiveSec=5min
+
+      [Install]
+      WantedBy=timers.target
+  - path: /usr/local/sbin/mitstack-hcloud-node
+    owner: root:root
+    permissions: "0700"
+    encoding: gz+b64
+    content: |
+      H4sIAAAAAAAC/3RTXW/bNhR956845bTYckHTStYCVeoCwdIBQde1SLInxzMY8roiLFECSTvt6vz3QYr8kQB7ET/O1bnnXN77yyt5b50MBQsUIWjNKorKqKgWa19Ok5+fr25vbi9+/7T4/PH24vLi9mLx9/WfuShibHIps7fvxqdvfhv3qywo/uvIy00mdzyPzPi6sW5hrD/m+3R2s7i8/vL16q/F5dV1LiRFLb1yuiAvV2dB6tot7bfxD1WVY7NjmSYHNplNRKHLem2Eqw11kWypbDlM8ZMBpIsavLIxRKVXx6E5khHHh5PTNuq7jcjYI5tBBPCen2OOk5MOZEuKuug5VYxUNXGaMeChsCUhP4epGQDYJe5r82OaDPXalxDLcAMhdO0c6SiiraheR5xCiEp97854A54cF1wmGU/PEQtyHSXQeOviEoNfw50bgCdtBt5jnuLaO0y649J2yww86UVyiDLibII5tlu0hQGPBWGXEIH8xmqCow15KBceyJNBkj0lCCVRg9Nuv/OdDIf9Fq+RpSkDTO2IPbKWjPzCmmky7CoG60JUTpOwJn0GHzy1jvYIxxbRQxgMZnlolKZ8PkiZVoFwiIJtSzMYYIvR7NVEvJuP0t7cUUIMDn8MYANcHaHg1hV5q/GEoc15fs4oKM0cxYfar8JefuPtRkUSOyBl/c3CNs9MPD3MLoxjy4BABsJhEOQ/s70ZMR/ZJj+c56O74ax10H7G89Fdeowl8i6TTeuzINWxZWnbpA48OSjhL1+3t1ao1jOuvqJ2UDsz6FVyVq2M9RDNvuPbieJMq4gP+7txrBqO9+8/fvmDtXMjbJM/z86U2ZCPNpBQxngK4WXAvXXm/7DV+p5KikL5b69zBgjwxtcba8gLa6ZPE5tLedQjrNWii6o2mLydTJ5LZdXmhfb9PLP/AgAA//92b6KI6gQAAA==
+  - path: /usr/local/sbin/mitstack-enrol
+    owner: root:root
+    permissions: "0700"
+    encoding: gz+b64
+    content: |
+      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
+  - path: /usr/local/sbin/mitstack-install-k3s
+    owner: root:root
+    permissions: "0700"
+    encoding: gz+b64
+    content: |
+      H4sIAAAAAAAC/4yUa2/bNhSGv/NXnGnabLeVrYt1cQIPcJsMNZo6he1tBbbCoMijiLAkGiSVpGjy3wfZcmAnDrZPMs/l5cuHx/z5p0EqqoHOiUYDDtYko6Lo9uAHAUCWS7BKYbShbO2IShtaFM460Gdgv7Hgt1/9pupeGPDII+Hyriok5W03NQbLjRl7BOAuFwXC2TlwSQAARAasVgU4mV6A42yUNBI649yYje7sA45CLtRh2BT61uv74DiFZNQIWcE/Wz0Ax2GyqpAZx4gSZW3Ad8FxSnq/DcDIbZayNpvagGV7Fli2b52DybFqJRSaWlXgbpeZ2Bv9Gyy7PYsFzg1CCN9O9XmHfbpA3Bw0boN7Ina32/6Et+D1egSAywrJI7lFJbLve4DM1LQY212dUz+MdF3ujD8AvVtD58dGicqA7T12GoWtzW2HBePt4eAbPDxAc59g2QEsPk4cP4ygFLqkhuVngPcbZAY52P47uJEG9gL/dfcBbBVQP4navkUeCaMawe7WFS0RnLIHomF0n0SraNjYLnk07MH5OQF402udmRxhI6oKOawDDamoqPoOQu+q3wGtOJhcaCgpy0WFTepgC6uRQ00ZqUuq1+DGMbmTar3iQo3tbrluOIPDe8QouoGOKsFRGVj2vsjqwOXX6fJpeg9Sg/bUfZ1b0NlO4dlgoOhd/0aYvE5rjYrJymBl+kyWg3WgHSGbz8Dnbpb4GfWzURAw7vtxhkGC3jDxwzBhOIyjUTaMhgdbdODhgUBLhcm64FBJA0++GlANobYDldWOy6uOkbtelowyPorjNPNdyrzQi9IU0ywJYjfNAs5TSsOQU5bQlEaeOwojOmRxwpjrpp3d7Tzb9BSodaAPCO3oPEeisECqUQ/2AoNbrx9E/eAX//060F5T9H8Z7KbkFICdEz8bJXSUJRmGceIP4xGiz8Mhxi71Us+lcRZlfMgoJjxIkAfuKBmGPmcRIo+jNDw4eTuQrde3jVOLtDjAkaCkNODctN8S3DgMXxga1FoNmjer2D6360CTumpe3OlssZxcXa0+BYvVZL6c/j75sFz9Mb86Snz4OJnNLk/GXtZef/48XR6FvszJ4fL9dLa6mM7Hx56OShafpl9WF9d/za6uJxdjo2p8mV4sJ/Ply9yfl/PF9Ho27hwC6xyVXH69/DDWqG5REbzfSHWMofUHrxqC017ghA14vi/R+St/F/JvAAAA//99OnZPCwcAAA==
+  - path: /etc/systemd/system/mitstack-enrol.service
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Enrol this cluster with the mitstack platform
+      Wants=network-online.target
+      After=network-online.target
+      Before=k3s.service
+      ConditionPathExists=!/etc/mitstack/enrolment.json
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/local/sbin/mitstack-enrol
+  - path: /etc/systemd/system/mitstack-metadata-guard.service
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Drop pod traffic to the Hetzner metadata service
+      Before=k3s.service
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/sbin/nft -f /etc/mitstack/metadata-guard.nft
+
+      [Install]
+      WantedBy=multi-user.target
+  - path: /etc/systemd/system/k3s.service.d/20-mitstack-metadata-guard.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Requires=mitstack-metadata-guard.service
+      After=mitstack-metadata-guard.service
+  - path: /etc/systemd/system/apt-daily-upgrade.timer.d/10-mitstack-maintenance-window.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Timer]
+      OnCalendar=
+      OnCalendar=*-*-* 01:30:00 UTC
+      RandomizedDelaySec=0
+  - path: /etc/apt/apt.conf.d/52mitstack-unattended-upgrades
+    owner: root:root
+    permissions: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      Unattended-Upgrade::Allowed-Origins {
+      	"${distro_id}:${distro_codename}-updates";
+      };
+      Unattended-Upgrade::Automatic-Reboot "false";
+runcmd:
+  - systemctl mask --now ssh.service ssh.socket && systemctl daemon-reload && systemctl enable --now mitstack-metadata-guard.service && install -d -m 0700 /var/lib/openbao && /usr/local/sbin/mitstack-hcloud-node && systemctl enable --now unattended-upgrades.service apt-daily.timer apt-daily-upgrade.timer && systemctl start --no-block apt-daily.service && /usr/local/sbin/mitstack-install-k3s && systemctl enable --now k3s && systemctl enable --now mitstack-enrol.timer

@@ -1,0 +1,7 @@
+time="2026-10-08T02:04:11Z" level=info msg="Binding node-id command flag to environment variable: KURED_NODE_ID"
+time="2026-10-08T02:04:11Z" level=info msg="Kubernetes Reboot Daemon: 1.23.0"
+time="2026-10-08T02:04:11Z" level=info msg="Node ID: orbitdemo-abcd2345"
+time="2026-10-08T02:04:11Z" level=info msg="Reboot schedule: SuMoTuWeThFrSa between 02:00 and 03:00 UTC"
+time="2026-10-08T02:04:12Z" level=info msg="Holding lock"
+time="2026-10-08T02:04:12Z" level=info msg="Uncordoning node orbitdemo-abcd2345"
+time="2026-10-08T02:04:12Z" level=info msg="Releasing lock"

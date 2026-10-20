@@ -1,0 +1,6 @@
+table inet mitstack_metadata_guard {
+	chain forward {
+		type filter hook forward priority -10; policy accept;
+		ip daddr 169.254.169.254 counter packets 3 bytes 180 drop
+	}
+}

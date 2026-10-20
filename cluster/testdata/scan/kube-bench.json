@@ -1,0 +1,1095 @@
+{
+ "Controls": [
+  {
+   "id": "1",
+   "version": "k3s-cis-1.11",
+   "detected_version": "none",
+   "text": "Control Plane Security Configuration",
+   "node_type": "master",
+   "tests": [
+    {
+     "section": "1.1",
+     "desc": "Control Plane Node Configuration Files",
+     "results": [
+      {
+       "test_number": "1.1.1",
+       "test_desc": "Ensure that the API server pod specification file permissions are set to 600 or more restrictive (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.2",
+       "test_desc": "Ensure that the API server pod specification file ownership is set to root:root (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.3",
+       "test_desc": "Ensure that the controller manager pod specification file permissions are set to 600 or more restrictive (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.4",
+       "test_desc": "Ensure that the controller manager pod specification file ownership is set to root:root (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.5",
+       "test_desc": "Ensure that the scheduler pod specification file permissions are set to 600 or more restrictive (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.6",
+       "test_desc": "Ensure that the scheduler pod specification file ownership is set to root:root (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.7",
+       "test_desc": "Ensure that the etcd pod specification file permissions are set to 600 or more restrictive (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.8",
+       "test_desc": "Ensure that the etcd pod specification file ownership is set to root:root (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.9",
+       "test_desc": "Ensure that the Container Network Interface file permissions are set to 600 or more restrictive (Automated)",
+       "type": "",
+       "status": "FAIL",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.10",
+       "test_desc": "Ensure that the Container Network Interface file ownership is set to root:root (Automated)",
+       "type": "",
+       "status": "FAIL",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.11",
+       "test_desc": "Ensure that the etcd data directory permissions are set to 700 or more restrictive (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "1.1.12",
+       "test_desc": "Ensure that the etcd data directory ownership is set to etcd:etcd (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.13",
+       "test_desc": "Ensure that the admin.conf file permissions are set to 600 or more restrictive (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.14",
+       "test_desc": "Ensure that the admin.conf file ownership is set to root:root (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.15",
+       "test_desc": "Ensure that the scheduler.conf file permissions are set to 600 or more restrictive (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.16",
+       "test_desc": "Ensure that the scheduler.conf file ownership is set to root:root (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.17",
+       "test_desc": "Ensure that the controller-manager.conf file permissions are set to 600 or more restrictive (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.18",
+       "test_desc": "Ensure that the controller-manager.conf file ownership is set to root:root (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.19",
+       "test_desc": "Ensure that the Kubernetes PKI directory and file ownership is set to root:root (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.20",
+       "test_desc": "Ensure that the Kubernetes PKI certificate file permissions are set to 644 or more restrictive (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.1.21",
+       "test_desc": "Ensure that the Kubernetes PKI key file permissions are set to 600 (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      }
+     ]
+    },
+    {
+     "section": "1.2",
+     "desc": "API Server",
+     "results": [
+      {
+       "test_number": "1.2.1",
+       "test_desc": "Ensure that the --anonymous-auth argument is set to false (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.2",
+       "test_desc": "Ensure that the --token-auth-file parameter is not set (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.3",
+       "test_desc": "Ensure that the --DenyServiceExternalIPs is set (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "1.2.4",
+       "test_desc": "Ensure that the --kubelet-client-certificate and --kubelet-client-key arguments are set as appropriate (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.5",
+       "test_desc": "Ensure that the --kubelet-certificate-authority argument is set as appropriate (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.6",
+       "test_desc": "Ensure that the --authorization-mode argument is not set to AlwaysAllow (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.7",
+       "test_desc": "Ensure that the --authorization-mode argument includes Node (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.8",
+       "test_desc": "Ensure that the --authorization-mode argument includes RBAC (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.9",
+       "test_desc": "Ensure that the admission control plugin EventRateLimit is set (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "1.2.10",
+       "test_desc": "Ensure that the admission control plugin AlwaysAdmit is not set (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.11",
+       "test_desc": "Ensure that the admission control plugin AlwaysPullImages is set (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "1.2.12",
+       "test_desc": "Ensure that the admission control plugin ServiceAccount is set (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.13",
+       "test_desc": "Ensure that the admission control plugin NamespaceLifecycle is set (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.14",
+       "test_desc": "Ensure that the admission control plugin NodeRestriction is set (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.15",
+       "test_desc": "Ensure that the --profiling argument is set to false (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.16",
+       "test_desc": "Ensure that the --audit-log-path argument is set (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "1.2.17",
+       "test_desc": "Ensure that the --audit-log-maxage argument is set to 30 or as appropriate (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "1.2.18",
+       "test_desc": "Ensure that the --audit-log-maxbackup argument is set to 10 or as appropriate (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "1.2.19",
+       "test_desc": "Ensure that the --audit-log-maxsize argument is set to 100 or as appropriate (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "1.2.20",
+       "test_desc": "Ensure that the --request-timeout argument is set as appropriate (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "1.2.21",
+       "test_desc": "Ensure that the --service-account-lookup argument is set to true (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.22",
+       "test_desc": "Ensure that the --service-account-key-file argument is set as appropriate (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.23",
+       "test_desc": "Ensure that the --etcd-certfile and --etcd-keyfile arguments are set as appropriate (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.24",
+       "test_desc": "Ensure that the --tls-cert-file and --tls-private-key-file arguments are set as appropriate (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.25",
+       "test_desc": "Ensure that the --client-ca-file argument is set as appropriate (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.26",
+       "test_desc": "Ensure that the --etcd-cafile argument is set as appropriate (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.27",
+       "test_desc": "Ensure that the --encryption-provider-config argument is set as appropriate (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "1.2.28",
+       "test_desc": "Ensure that encryption providers are appropriately configured (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "1.2.29",
+       "test_desc": "Ensure that the API Server only makes use of Strong Cryptographic Ciphers (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.2.30",
+       "test_desc": "Ensure that the --service-account-extend-token-expiration parameter is set to false (Automated)",
+       "type": "",
+       "status": "FAIL",
+       "scored": true
+      }
+     ]
+    },
+    {
+     "section": "1.3",
+     "desc": "Controller Manager",
+     "results": [
+      {
+       "test_number": "1.3.1",
+       "test_desc": "Ensure that the --terminated-pod-gc-threshold argument is set as appropriate (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "1.3.2",
+       "test_desc": "Ensure that the --profiling argument is set to false (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.3.3",
+       "test_desc": "Ensure that the --use-service-account-credentials argument is set to true (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.3.4",
+       "test_desc": "Ensure that the --service-account-private-key-file argument is set as appropriate (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.3.5",
+       "test_desc": "Ensure that the --root-ca-file argument is set as appropriate (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.3.6",
+       "test_desc": "Ensure that the RotateKubeletServerCertificate argument is set to true (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.3.7",
+       "test_desc": "Ensure that the --bind-address argument is set to 127.0.0.1 (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      }
+     ]
+    },
+    {
+     "section": "1.4",
+     "desc": "Scheduler",
+     "results": [
+      {
+       "test_number": "1.4.1",
+       "test_desc": "Ensure that the --profiling argument is set to false (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "1.4.2",
+       "test_desc": "Ensure that the --bind-address argument is set to 127.0.0.1 (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      }
+     ]
+    }
+   ],
+   "total_pass": 39,
+   "total_fail": 3,
+   "total_warn": 9,
+   "total_info": 9
+  },
+  {
+   "id": "2",
+   "version": "k3s-cis-1.11",
+   "detected_version": "none",
+   "text": "Etcd Node Configuration",
+   "node_type": "etcd",
+   "tests": [
+    {
+     "section": "2",
+     "desc": "Etcd Node Configuration",
+     "results": [
+      {
+       "test_number": "2.1",
+       "test_desc": "Ensure that the --cert-file and --key-file arguments are set as appropriate (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "2.2",
+       "test_desc": "Ensure that the --client-cert-auth argument is set to true (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "2.3",
+       "test_desc": "Ensure that the --auto-tls argument is not set to true (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "2.4",
+       "test_desc": "Ensure that the --peer-cert-file and --peer-key-file arguments are set as appropriate (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "2.5",
+       "test_desc": "Ensure that the --peer-client-cert-auth argument is set to true (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "2.6",
+       "test_desc": "Ensure that the --peer-auto-tls argument is not set to true (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "2.7",
+       "test_desc": "Ensure that a unique Certificate Authority is used for etcd (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      }
+     ]
+    }
+   ],
+   "total_pass": 7,
+   "total_fail": 0,
+   "total_warn": 0,
+   "total_info": 0
+  },
+  {
+   "id": "3",
+   "version": "k3s-cis-1.11",
+   "detected_version": "none",
+   "text": "Control Plane Configuration",
+   "node_type": "controlplane",
+   "tests": [
+    {
+     "section": "3.1",
+     "desc": "Authentication and Authorization",
+     "results": [
+      {
+       "test_number": "3.1.1",
+       "test_desc": "Client certificate authentication should not be used for users (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "3.1.2",
+       "test_desc": "Service account token authentication should not be used for users (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "3.1.3",
+       "test_desc": "Bootstrap token authentication should not be used for users (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      }
+     ]
+    },
+    {
+     "section": "3.2",
+     "desc": "Logging",
+     "results": [
+      {
+       "test_number": "3.2.1",
+       "test_desc": "Ensure that a minimal audit policy is created (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "3.2.2",
+       "test_desc": "Ensure that the audit policy covers key security concerns (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      }
+     ]
+    }
+   ],
+   "total_pass": 0,
+   "total_fail": 0,
+   "total_warn": 5,
+   "total_info": 0
+  },
+  {
+   "id": "4",
+   "version": "k3s-cis-1.11",
+   "detected_version": "none",
+   "text": "Worker Node Security Configuration",
+   "node_type": "node",
+   "tests": [
+    {
+     "section": "4.1",
+     "desc": "Worker Node Configuration Files",
+     "results": [
+      {
+       "test_number": "4.1.1",
+       "test_desc": "Ensure that the kubelet service file permissions are set to 600 or more restrictive (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      },
+      {
+       "test_number": "4.1.2",
+       "test_desc": "Ensure that the kubelet service file ownership is set to root:root (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      },
+      {
+       "test_number": "4.1.3",
+       "test_desc": "If proxy kubeconfig file exists ensure permissions are set to 600 or more restrictive (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.1.4",
+       "test_desc": "If proxy kubeconfig file exists ensure ownership is set to root:root (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.1.5",
+       "test_desc": "Ensure that the --kubeconfig kubelet.conf file permissions are set to 600 or more restrictive (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.1.6",
+       "test_desc": "Ensure that the --kubeconfig kubelet.conf file ownership is set to root:root (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.1.7",
+       "test_desc": "Ensure that the certificate authorities file permissions are set to 600 or more restrictive (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.1.8",
+       "test_desc": "Ensure that the client certificate authorities file ownership is set to root:root (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.1.9",
+       "test_desc": "Ensure that the kubelet --config configuration file has permissions set to 600 or more restrictive (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      },
+      {
+       "test_number": "4.1.10",
+       "test_desc": "Ensure that the kubelet --config configuration file ownership is set to root:root (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      }
+     ]
+    },
+    {
+     "section": "4.2",
+     "desc": "Kubelet",
+     "results": [
+      {
+       "test_number": "4.2.1",
+       "test_desc": "Ensure that the --anonymous-auth argument is set to false (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.2.2",
+       "test_desc": "Ensure that the --authorization-mode argument is not set to AlwaysAllow (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.2.3",
+       "test_desc": "Ensure that the --client-ca-file argument is set as appropriate (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.2.4",
+       "test_desc": "Verify that if defined, the --read-only-port argument is set to 0 (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.2.5",
+       "test_desc": "Ensure that the --streaming-connection-idle-timeout argument is not set to 0 (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "4.2.6",
+       "test_desc": "Ensure that the --make-iptables-util-chains argument is set to true (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.2.7",
+       "test_desc": "Ensure that the --hostname-override argument is not set (Automated)",
+       "type": "skip",
+       "status": "INFO",
+       "scored": true
+      },
+      {
+       "test_number": "4.2.8",
+       "test_desc": "Ensure that the eventRecordQPS argument is set to a level which ensures appropriate event capture (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "4.2.9",
+       "test_desc": "Ensure that the --tls-cert-file and --tls-private-key-file arguments are set as appropriate (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.2.10",
+       "test_desc": "Ensure that the --rotate-certificates argument is not set to false (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.2.11",
+       "test_desc": "Verify that the RotateKubeletServerCertificate argument is set to true (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      },
+      {
+       "test_number": "4.2.12",
+       "test_desc": "Ensure that the Kubelet only makes use of Strong Cryptographic Ciphers (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "4.2.13",
+       "test_desc": "Ensure that a limit is set on pod PIDs (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "4.2.14",
+       "test_desc": "Ensure that the --seccomp-default parameter is set to true (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      }
+     ]
+    },
+    {
+     "section": "4.3",
+     "desc": "kube-proxy",
+     "results": [
+      {
+       "test_number": "4.3.1",
+       "test_desc": "Ensure that the kube-proxy metrics service is bound to localhost (Automated)",
+       "type": "",
+       "status": "PASS",
+       "scored": true
+      }
+     ]
+    }
+   ],
+   "total_pass": 17,
+   "total_fail": 0,
+   "total_warn": 3,
+   "total_info": 5
+  },
+  {
+   "id": "5",
+   "version": "k3s-cis-1.11",
+   "detected_version": "none",
+   "text": "Kubernetes Policies",
+   "node_type": "policies",
+   "tests": [
+    {
+     "section": "5.1",
+     "desc": "RBAC and Service Accounts",
+     "results": [
+      {
+       "test_number": "5.1.1",
+       "test_desc": "Ensure that the cluster-admin role is only used where required (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "5.1.2",
+       "test_desc": "Minimize access to secrets (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "5.1.3",
+       "test_desc": "Minimize wildcard use in Roles and ClusterRoles (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.1.4",
+       "test_desc": "Minimize access to create pods (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "5.1.5",
+       "test_desc": "Ensure that default service accounts are not actively used. (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.1.6",
+       "test_desc": "Ensure that Service Account Tokens are only mounted where necessary (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.1.7",
+       "test_desc": "Avoid use of system:masters group (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.1.8",
+       "test_desc": "Limit use of the Bind, Impersonate and Escalate permissions in the Kubernetes cluster (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.1.9",
+       "test_desc": "Minimize access to create persistent volumes (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.1.10",
+       "test_desc": "Minimize access to the proxy sub-resource of nodes (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.1.11",
+       "test_desc": "Minimize access to the approval sub-resource of certificatesigningrequests objects (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.1.12",
+       "test_desc": "Minimize access to webhook configuration objects (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.1.13",
+       "test_desc": "Minimize access to the service account token creation (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      }
+     ]
+    },
+    {
+     "section": "5.2",
+     "desc": "Pod Security Standards",
+     "results": [
+      {
+       "test_number": "5.2.1",
+       "test_desc": "Ensure that the cluster has at least one active policy control mechanism in place (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.2.2",
+       "test_desc": "Minimize the admission of privileged containers (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.2.3",
+       "test_desc": "Minimize the admission of containers wishing to share the host process ID namespace (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "5.2.4",
+       "test_desc": "Minimize the admission of containers wishing to share the host IPC namespace (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "5.2.5",
+       "test_desc": "Minimize the admission of containers wishing to share the host network namespace (Manual)",
+       "type": "",
+       "status": "PASS",
+       "scored": false
+      },
+      {
+       "test_number": "5.2.6",
+       "test_desc": "Minimize the admission of containers with allowPrivilegeEscalation (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.2.7",
+       "test_desc": "Minimize the admission of root containers (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.2.8",
+       "test_desc": "Minimize the admission of containers with the NET_RAW capability (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.2.9",
+       "test_desc": "Minimize the admission of containers with added capabilities (Manual)",
+       "type": "",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.2.10",
+       "test_desc": "Minimize the admission of containers with capabilities assigned (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.2.11",
+       "test_desc": "Minimize the admission of Windows HostProcess containers (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.2.12",
+       "test_desc": "Minimize the admission of HostPath volumes (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.2.13",
+       "test_desc": "Minimize the admission of containers which use HostPorts (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      }
+     ]
+    },
+    {
+     "section": "5.3",
+     "desc": "Network Policies and CNI",
+     "results": [
+      {
+       "test_number": "5.3.1",
+       "test_desc": "Ensure that the CNI in use supports NetworkPolicies (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.3.2",
+       "test_desc": "Ensure that all Namespaces have NetworkPolicies defined (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      }
+     ]
+    },
+    {
+     "section": "5.4",
+     "desc": "Secrets Management",
+     "results": [
+      {
+       "test_number": "5.4.1",
+       "test_desc": "Prefer using Secrets as files over Secrets as environment variables (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.4.2",
+       "test_desc": "Consider external secret storage (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      }
+     ]
+    },
+    {
+     "section": "5.5",
+     "desc": "Extensible Admission Control",
+     "results": [
+      {
+       "test_number": "5.5.1",
+       "test_desc": "Configure Image Provenance using ImagePolicyWebhook admission controller (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      }
+     ]
+    },
+    {
+     "section": "5.6",
+     "desc": "General Policies",
+     "results": [
+      {
+       "test_number": "5.6.1",
+       "test_desc": "Create administrative boundaries between resources using namespaces (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.6.2",
+       "test_desc": "Ensure that the seccomp profile is set to docker/default in your Pod definitions (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.6.3",
+       "test_desc": "Apply SecurityContext to your Pods and Containers (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      },
+      {
+       "test_number": "5.6.4",
+       "test_desc": "The default namespace should not be used (Manual)",
+       "type": "manual",
+       "status": "WARN",
+       "scored": false
+      }
+     ]
+    }
+   ],
+   "total_pass": 6,
+   "total_fail": 0,
+   "total_warn": 29,
+   "total_info": 0
+  }
+ ],
+ "Totals": {
+  "total_pass": 69,
+  "total_fail": 3,
+  "total_warn": 46,
+  "total_info": 14
+ }
+}

@@ -1,0 +1,17 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: mitstack-generate-default-deny
+policies:
+- ../../policies/mitstack-generate-default-deny.yaml
+resources:
+- accepted.yaml
+- refused.yaml
+results:
+- isGeneratingPolicy: true
+  policy: mitstack-generate-default-deny
+  kind: Namespace
+  resources:
+  - accepted-generate-default-deny
+  result: pass
+  generatedResource: generated-resource.yaml

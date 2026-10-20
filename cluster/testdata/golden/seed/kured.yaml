@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kured
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://kubereboot.github.io/charts
+    chart: kured
+    targetRevision: 6.1.0
+    helm:
+      releaseName: kured
+      values: |
+        configuration:
+          period: "5m"
+          rebootSentinel: "/var/run/reboot-required"
+          startTime: "02:00"
+          endTime: "03:00"
+          timeZone: "UTC"
+          drainTimeout: "15m"
+          forceReboot: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

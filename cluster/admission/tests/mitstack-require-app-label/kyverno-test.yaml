@@ -1,0 +1,22 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: mitstack-require-app-label
+policies:
+- ../../policies/mitstack-require-app-label.yaml
+resources:
+- accepted.yaml
+- refused.yaml
+results:
+- isValidatingPolicy: true
+  policy: mitstack-require-app-label
+  kind: Deployment
+  resources:
+  - accepted-require-app-label
+  result: pass
+- isValidatingPolicy: true
+  policy: mitstack-require-app-label
+  kind: Deployment
+  resources:
+  - refused-require-app-label
+  result: fail

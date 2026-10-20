@@ -1,0 +1,4 @@
+[
+  {"namespace": "app-s4338-a1", "name": "s4338-a1-tls-1-2-3", "dnsName": "s4338-a1.apps.mitstack.dev", "state": "pending", "reason": "pods \"cm-acme-http-solver-\" is forbidden: violates policy"},
+  {"namespace": "app-s4338-b2", "name": "s4338-b2-tls-4-5-6", "dnsName": "s4338-b2.apps.mitstack.dev", "state": "valid", "reason": null}
+]

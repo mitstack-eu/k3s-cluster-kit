@@ -1,0 +1,55 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: mitstack-database-slices
+specs:
+- description: "A Postgres instance in a database slice reaches the API server and the other instances, and admits the operator on 8000 and every slice on 5432."
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.namespace.labels.mitstack.dev/database-slice: "true"
+      k8s:cnpg.io/podRole: instance
+  egress:
+  - toEntities: [kube-apiserver]
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.cilium.k8s.namespace.labels.mitstack.dev/database-slice: "true"
+        k8s:cnpg.io/podRole: instance
+    toPorts:
+    - ports: [{port: "5432", protocol: TCP}]
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        k8s:io.kubernetes.pod.namespace: cnpg-system
+        k8s:app.kubernetes.io/name: cloudnative-pg
+    toPorts:
+    - ports: [{port: "8000", protocol: TCP}]
+  - fromEndpoints:
+    - matchExpressions:
+      - {key: k8s:io.cilium.k8s.namespace.labels.mitstack.dev/subscription, operator: Exists}
+    toPorts:
+    - ports: [{port: "5432", protocol: TCP}]
+- description: "A CloudNativePG Job in a database slice, such as initdb or join, reaches the API server and the instances on 5432."
+  endpointSelector:
+    matchLabels:
+      k8s:io.cilium.k8s.namespace.labels.mitstack.dev/database-slice: "true"
+    matchExpressions:
+    - {key: k8s:cnpg.io/jobRole, operator: Exists}
+  egress:
+  - toEntities: [kube-apiserver]
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.cilium.k8s.namespace.labels.mitstack.dev/database-slice: "true"
+        k8s:cnpg.io/podRole: instance
+    toPorts:
+    - ports: [{port: "5432", protocol: TCP}]
+- description: "A pod in any slice reaches the Postgres instances of a database slice on 5432."
+  endpointSelector:
+    matchExpressions:
+    - {key: k8s:io.cilium.k8s.namespace.labels.mitstack.dev/subscription, operator: Exists}
+  egress:
+  - toEndpoints:
+    - matchLabels:
+        k8s:io.cilium.k8s.namespace.labels.mitstack.dev/database-slice: "true"
+        k8s:cnpg.io/podRole: instance
+    toPorts:
+    - ports: [{port: "5432", protocol: TCP}]

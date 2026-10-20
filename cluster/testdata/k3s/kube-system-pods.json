@@ -1,0 +1,72 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "metadata": {"resourceVersion": ""},
+  "items": [
+    {
+      "metadata": {"name": "cilium-x7k2p", "namespace": "kube-system",
+        "labels": {"app.kubernetes.io/part-of": "cilium", "app.kubernetes.io/name": "cilium-agent", "k8s-app": "cilium"}},
+      "spec": {
+        "initContainers": [{"name": "config", "image": "quay.io/cilium/cilium:v1.19.3"}],
+        "containers": [{"name": "cilium-agent", "image": "quay.io/cilium/cilium:v1.19.3", "env": [{"name": "CILIUM_CLUSTERMESH_SECRET", "value": "@SECRET@"}]}]
+      },
+      "status": {
+        "phase": "Running",
+        "conditions": [{"type": "Ready", "status": "True"}],
+        "initContainerStatuses": [{"name": "config", "image": "quay.io/cilium/cilium:v1.19.3", "imageID": "quay.io/cilium/cilium@sha256:1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d"}],
+        "containerStatuses": [{"name": "cilium-agent", "image": "quay.io/cilium/cilium:v1.19.3", "imageID": "quay.io/cilium/cilium@sha256:1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d1a2b3c4d"}]
+      }
+    },
+    {
+      "metadata": {"name": "cilium-envoy-5d8qz", "namespace": "kube-system",
+        "labels": {"app.kubernetes.io/part-of": "cilium", "app.kubernetes.io/name": "cilium-envoy"}},
+      "spec": {"containers": [{"name": "cilium-envoy", "image": "quay.io/cilium/cilium-envoy:v1.35.9-1767000000-0123456789abcdef"}]},
+      "status": {
+        "phase": "Running",
+        "conditions": [{"type": "Ready", "status": "True"}],
+        "containerStatuses": [{"name": "cilium-envoy", "image": "quay.io/cilium/cilium-envoy:v1.35.9-1767000000-0123456789abcdef", "imageID": "quay.io/cilium/cilium-envoy@sha256:2b3c4d5e2b3c4d5e2b3c4d5e2b3c4d5e2b3c4d5e2b3c4d5e2b3c4d5e2b3c4d5e"}]
+      }
+    },
+    {
+      "metadata": {"name": "cilium-operator-6f7b9c4d8-m2xkq", "namespace": "kube-system",
+        "labels": {"app.kubernetes.io/part-of": "cilium", "app.kubernetes.io/name": "cilium-operator"}},
+      "spec": {"containers": [{"name": "cilium-operator", "image": "quay.io/cilium/operator-generic:v1.19.3"}]},
+      "status": {
+        "phase": "Running",
+        "conditions": [{"type": "Ready", "status": "True"}],
+        "containerStatuses": [{"name": "cilium-operator", "image": "quay.io/cilium/operator-generic:v1.19.3", "imageID": "quay.io/cilium/operator-generic@sha256:3c4d5e6f3c4d5e6f3c4d5e6f3c4d5e6f3c4d5e6f3c4d5e6f3c4d5e6f3c4d5e6f"}]
+      }
+    },
+    {
+      "metadata": {"name": "hubble-relay-7c5f6d9b8-q4wz2", "namespace": "kube-system",
+        "labels": {"app.kubernetes.io/part-of": "cilium", "app.kubernetes.io/name": "hubble-relay"}},
+      "spec": {"containers": [{"name": "hubble-relay", "image": "quay.io/cilium/hubble-relay:v1.19.3"}]},
+      "status": {"phase": "Pending", "conditions": [{"type": "Ready", "status": "False", "reason": "ContainersNotReady"}]}
+    },
+    {
+      "metadata": {"name": "hubble-ui-6b8d7f5c4-r7tn5", "namespace": "kube-system",
+        "labels": {"app.kubernetes.io/part-of": "cilium", "app.kubernetes.io/name": "hubble-ui"}},
+      "spec": {"containers": [
+        {"name": "frontend", "image": "quay.io/cilium/hubble-ui:v0.13.3"},
+        {"name": "backend", "image": "quay.io/cilium/hubble-ui-backend:v0.13.3"}
+      ]},
+      "status": {
+        "phase": "Running",
+        "conditions": [{"type": "Ready", "status": "True"}],
+        "containerStatuses": [
+          {"name": "backend", "image": "quay.io/cilium/hubble-ui-backend:v0.13.3", "imageID": "quay.io/cilium/hubble-ui-backend@sha256:4d5e6f704d5e6f704d5e6f704d5e6f704d5e6f704d5e6f704d5e6f704d5e6f70"},
+          {"name": "frontend", "image": "quay.io/cilium/hubble-ui:v0.13.3", "imageID": "quay.io/cilium/hubble-ui@sha256:5e6f70815e6f70815e6f70815e6f70815e6f70815e6f70815e6f70815e6f7081"}
+        ]
+      }
+    },
+    {
+      "metadata": {"name": "coredns-7b98449c4-9xk2w", "namespace": "kube-system", "labels": {"k8s-app": "kube-dns"}},
+      "spec": {"containers": [{"name": "coredns", "image": "rancher/mirrored-coredns-coredns:1.12.3"}]},
+      "status": {
+        "phase": "Running",
+        "conditions": [{"type": "Ready", "status": "True"}],
+        "containerStatuses": [{"name": "coredns", "image": "rancher/mirrored-coredns-coredns:1.12.3", "imageID": "docker.io/rancher/mirrored-coredns-coredns@sha256:6f7081926f7081926f7081926f7081926f7081926f7081926f7081926f708192"}]
+      }
+    }
+  ]
+}

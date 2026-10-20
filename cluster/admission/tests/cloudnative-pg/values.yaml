@@ -1,0 +1,16 @@
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Value
+metadata:
+  name: values
+namespaceSelector:
+- name: app-s4338-pg
+  labels:
+    kubernetes.io/metadata.name: app-s4338-pg
+    mitstack.dev/app: s4338-pg
+    mitstack.dev/subscription: sub_5d77bef5b63b
+    mitstack.dev/database-slice: "true"
+    pod-security.kubernetes.io/enforce: restricted
+- name: cnpg-system
+  labels:
+    kubernetes.io/metadata.name: cnpg-system
+    pod-security.kubernetes.io/enforce: restricted

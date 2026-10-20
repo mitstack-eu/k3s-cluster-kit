@@ -1,0 +1,5 @@
+[
+  {"namespace": "app-s4338-a1", "name": "s4338-a1-tls", "status": "False", "reason": "DoesNotExist", "message": "Issuing certificate as Secret does not exist"},
+  {"namespace": "app-s4338-b2", "name": "s4338-b2-tls", "status": "True", "reason": "Ready", "message": "Certificate is up to date and has not expired"},
+  {"namespace": "app-fresh", "name": "fresh-tls", "status": null, "reason": null, "message": null}
+]

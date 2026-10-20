@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: other-identity-verify-node-agent-signature
+  namespace: mitstack-node
+  labels:
+    mitstack.dev/app: probe
+spec:
+  containers:
+  - name: agent
+    image: ghcr.io/mitstack-eu/mitstack-node-agent@sha256:3b99adbbbd30d23206f8b83d2349be228b4cca02525c7f077a55db1fcf74152a
+    resources:
+      limits: {cpu: 100m, memory: 64Mi}
