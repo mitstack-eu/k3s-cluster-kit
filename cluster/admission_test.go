@@ -210,7 +210,7 @@ func TestAdmission_ValidatingPoliciesExcludeExactlyTheSystemNamespacesByName(t *
 			got := testutil.Dig(policy, "spec", "matchConstraints", "namespaceSelector", "matchExpressions")
 
 			want := []any{map[string]any{"key": "kubernetes.io/metadata.name", "operator": "NotIn", "values": stringList(admissionSystemNamespaces)}}
-			testutil.FailIf(t, !equalValues(got, want), "%s spec.matchConstraints.namespaceSelector.matchExpressions = %#v, want %#v", name, got, want)
+			testutil.FailIf(t, !reflect.DeepEqual(got, want), "%s spec.matchConstraints.namespaceSelector.matchExpressions = %#v, want %#v", name, got, want)
 		})
 	}
 }
@@ -345,7 +345,7 @@ func TestAdmission_DeploymentFixturesComplyWithPodSecurityRestrictedExceptWhereT
 				testutil.FailIf(t, testutil.Dig(p.pod, "securityContext", "seccompProfile", "type") != "RuntimeDefault", "%s %s: pod seccompProfile.type = %#v, want RuntimeDefault", policy, file, testutil.Dig(p.pod, "securityContext", "seccompProfile", "type"))
 				for _, c := range p.containers {
 					testutil.FailIf(t, testutil.Dig(c, "securityContext", "allowPrivilegeEscalation") != false, "%s %s: container %v allowPrivilegeEscalation = %#v, want false", policy, file, c["name"], testutil.Dig(c, "securityContext", "allowPrivilegeEscalation"))
-					testutil.FailIf(t, !equalValues(testutil.Dig(c, "securityContext", "capabilities", "drop"), []any{"ALL"}), "%s %s: container %v capabilities.drop = %#v, want [ALL]", policy, file, c["name"], testutil.Dig(c, "securityContext", "capabilities", "drop"))
+					testutil.FailIf(t, !reflect.DeepEqual(testutil.Dig(c, "securityContext", "capabilities", "drop"), []any{"ALL"}), "%s %s: container %v capabilities.drop = %#v, want [ALL]", policy, file, c["name"], testutil.Dig(c, "securityContext", "capabilities", "drop"))
 					testutil.FailIf(t, testutil.Dig(c, "securityContext", "privileged") == true, "%s %s: container %v is privileged, and only the probe may be", policy, file, c["name"])
 				}
 				matches := testutil.Dig(doc, "spec", "selector", "matchLabels").(map[string]any)
@@ -378,8 +378,6 @@ func stringList(values []string) []any {
 	}
 	return out
 }
-
-func equalValues(got, want any) bool { return reflect.DeepEqual(got, want) }
 
 func TestAdmission_SignatureTestAdmitsThePinnedImageAndRefusesTheTwoFixturesWhichTheNodeAgentAlsoDryRuns(t *testing.T) {
 	image := func(file string) any {

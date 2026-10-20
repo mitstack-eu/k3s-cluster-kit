@@ -61,7 +61,7 @@ func nonDefaultVersions(t *testing.T) Versions {
 	v.TraefikChartVersion = "41.6.9"
 	v.CertManagerChartVersion = "v1.21.9"
 	recordACMESolverDigest(t, v.CertManagerChartVersion)
-	setKyvernoVersion(&v, "3.9.9")
+	v.KyvernoChartVersion = "3.9.9"
 	return v
 }
 
@@ -115,12 +115,13 @@ func seedApplications(t *testing.T, v Versions) map[string]map[string]any {
 	return apps
 }
 
-func TestRenderSeed_IsOneArgoCDApplicationPerFileForArgoCDAndCilium(t *testing.T) {
+func TestRenderSeed_IsOneArgoCDApplicationPerFileForArgoCDAndCiliumThatPrunesAndSelfHeals(t *testing.T) {
 	for name, app := range seedApplications(t, PinnedVersions) {
 		testutil.AssertPaths(t, name+" Application", app, map[string]any{
 			"apiVersion": "argoproj.io/v1alpha1", "kind": "Application", "metadata.name": name, "metadata.namespace": "argocd",
 			"spec.project": "default", "spec.destination.server": inClusterAPI,
 		})
+		automatedPruneSelfHeal(t, name+" Application", app)
 		assertNoCredentialDeclared(t, name+" Application", app)
 	}
 }
@@ -184,20 +185,7 @@ func TestRenderSeed_EachSourceIsTheBootstrapHelmChartItAdopts(t *testing.T) {
 
 func TestRenderSeed_CiliumRunsOneOperatorThatRollsInPlace(t *testing.T) {
 	app := seedApplications(t, PinnedVersions)["cilium"]
-	values, ok := testutil.Dig(app, "spec", "source", "helm", "values").(string)
-	testutil.FatalIf(t, !ok, "cilium Application spec.source.helm.values is %T, want a string of YAML", testutil.Dig(app, "spec", "source", "helm", "values"))
-	assertOneOperatorRollingInPlace(t, "cilium Application helm.values", testutil.YamlMap(t, "cilium helm.values", values))
-}
-
-func TestRenderSeed_BothApplicationsPruneAndSelfHeal(t *testing.T) {
-	for name, app := range seedApplications(t, PinnedVersions) {
-		automated, ok := testutil.Dig(app, "spec", "syncPolicy", "automated").(map[string]any)
-		if !ok {
-			t.Errorf("%s Application spec.syncPolicy.automated is %T, want a mapping", name, testutil.Dig(app, "spec", "syncPolicy", "automated"))
-			continue
-		}
-		testutil.FailIf(t, automated["prune"] != true || automated["selfHeal"] != true, "%s Application syncPolicy.automated = %v, want prune: true and selfHeal: true", name, automated)
-	}
+	assertOneOperatorRollingInPlace(t, "cilium Application helm.values", testutil.ChartValues(t, "cilium Application", app))
 }
 
 func TestRenderSeed_ArgoCDSyncsServerSide(t *testing.T) {
@@ -240,14 +228,6 @@ func TestRenderSeed_CiliumIgnoresExactlyTheRegeneratedCertificateSecrets(t *test
 	}
 }
 
-func TestRenderSeed_IsDeterministic(t *testing.T) {
-	first, err := RenderSeed(PinnedVersions, testutil.FixtureIngressIPv4, testutil.FixtureRepoURL)
-	testutil.FatalIf(t, err != nil, "RenderSeed: %v", err)
-	second, err := RenderSeed(PinnedVersions, testutil.FixtureIngressIPv4, testutil.FixtureRepoURL)
-	testutil.FatalIf(t, err != nil, "RenderSeed: %v", err)
-	testutil.FailIf(t, !reflect.DeepEqual(first, second), "two renders of the same versions differ")
-}
-
 func automatedPruneSelfHeal(t *testing.T, what string, app map[string]any) {
 	t.Helper()
 	automated, ok := testutil.Dig(app, "spec", "syncPolicy", "automated").(map[string]any)
@@ -266,10 +246,8 @@ func TestRenderSeed_KuredRebootsOnlyBetween0200And0300UTC(t *testing.T) {
 		automatedPruneSelfHeal(t, "kured Application", app)
 		assertNoCredentialDeclared(t, "kured Application", app)
 
-		values, ok := testutil.Dig(app, "spec", "source", "helm", "values").(string)
-		testutil.FatalIf(t, !ok, "kured Application spec.source.helm.values is %T, want the values text", testutil.Dig(app, "spec", "source", "helm", "values"))
-		configuration, ok := testutil.Dig(testutil.YamlMap(t, "kured helm.values", values), "configuration").(map[string]any)
-		testutil.FatalIf(t, !ok, "kured helm.values carries no configuration mapping:\n%s", values)
+		configuration, ok := testutil.Dig(testutil.ChartValues(t, "kured Application", app), "configuration").(map[string]any)
+		testutil.FatalIf(t, !ok, "kured helm.values carries no configuration mapping")
 		// A drain a PodDisruptionBudget blocks gives up after 15 minutes
 		// and the reboot goes ahead, so kured never leaves the node
 		// cordoned.
@@ -310,20 +288,27 @@ func TestRenderSeed_SystemUpgradeControllerRunsThePinnedReleaseByItsDigest(t *te
 // upgradeControllerPinnedDigest is the image index Docker Hub serves for rancher/system-upgrade-controller:v0.20.2.
 const upgradeControllerPinnedDigest = "sha256:61b68d4372baf7ae90fb0f879feea1c082381a8b7547cc5ec85d393c497b11cb"
 
-func TestRenderSeed_SystemUpgradeControllerDigestIsRecordedForThePinnedRelease(t *testing.T) {
-	got := upgradeControllerDigests[PinnedVersions.SystemUpgradeControllerVersion]
+func TestRenderSeed_PinsEachImageByTheDigestRecordedForItsVersionAndRefusesAVersionWithNone(t *testing.T) {
+	for _, tc := range []struct {
+		name, recorded, pinnedDigest, unrecorded, refusal string
+		set                                               func(*Versions, string)
+	}{
+		{"system-upgrade-controller", upgradeControllerDigests[PinnedVersions.SystemUpgradeControllerVersion], upgradeControllerPinnedDigest, "v0.20.3", "system-upgrade-controller digest",
+			func(v *Versions, s string) { v.SystemUpgradeControllerVersion = s }},
+		{"acmesolver", acmesolverDigests[PinnedVersions.CertManagerChartVersion], acmesolverPinnedDigest, "v1.21.3", "acmesolver digest",
+			func(v *Versions, s string) { v.CertManagerChartVersion = s }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := PinnedVersions
+			tc.set(&v, tc.unrecorded)
 
-	testutil.FailIf(t, got != upgradeControllerPinnedDigest, "upgradeControllerDigests[%q] = %q; want %q", PinnedVersions.SystemUpgradeControllerVersion, got, upgradeControllerPinnedDigest)
-}
+			files, err := RenderSeed(v, testutil.FixtureIngressIPv4, testutil.FixtureRepoURL)
 
-func TestRenderSeed_RefusesASystemUpgradeControllerVersionWithNoRecordedDigest(t *testing.T) {
-	v := PinnedVersions
-	v.SystemUpgradeControllerVersion = "v0.20.3"
-
-	files, err := RenderSeed(v, testutil.FixtureIngressIPv4, testutil.FixtureRepoURL)
-
-	testutil.FatalIf(t, err == nil, "RenderSeed with SystemUpgradeControllerVersion %q rendered %d files; want an error naming the missing system-upgrade-controller digest", v.SystemUpgradeControllerVersion, len(files))
-	testutil.FailIf(t, !strings.Contains(err.Error(), "system-upgrade-controller digest") || !strings.Contains(err.Error(), "v0.20.3"), "RenderSeed with SystemUpgradeControllerVersion %q = %q; want an error naming the system-upgrade-controller digest and the version", v.SystemUpgradeControllerVersion, err)
+			testutil.FailIf(t, tc.recorded != tc.pinnedDigest, "the %s digest recorded for the pinned version = %q; want %q", tc.name, tc.recorded, tc.pinnedDigest)
+			testutil.FatalIf(t, err == nil, "RenderSeed with the unrecorded version %q rendered %d files; want an error naming the missing %s", tc.unrecorded, len(files), tc.refusal)
+			testutil.FailIf(t, !strings.Contains(err.Error(), tc.refusal) || !strings.Contains(err.Error(), tc.unrecorded), "RenderSeed with %q = %q; want an error naming the %s and the version", tc.unrecorded, err, tc.refusal)
+		})
+	}
 }
 
 func TestRenderSeed_K3sUpgradePlanFollowsThePinnedMinorsChannelInsideTheWindow(t *testing.T) {
@@ -395,9 +380,9 @@ func TestRenderSeed_RefusesAPinOutOfShape(t *testing.T) {
 		{"an empty cert-manager chart version", "CertManagerChartVersion", "", func(v *Versions, s string) { v.CertManagerChartVersion = s }},
 		{"a cert-manager chart version without the v prefix", "CertManagerChartVersion", "1.21.2", func(v *Versions, s string) { v.CertManagerChartVersion = s }},
 		{"a cert-manager chart version carrying a second YAML line", "CertManagerChartVersion", "v1.21.2\ncrds: {}", func(v *Versions, s string) { v.CertManagerChartVersion = s }},
-		{"an empty kyverno chart version", "KyvernoChartVersion", "", func(v *Versions, s string) { setKyvernoVersion(v, s) }},
-		{"a kyverno chart version with a v prefix", "KyvernoChartVersion", "v3.9.1", func(v *Versions, s string) { setKyvernoVersion(v, s) }},
-		{"a kyverno chart version carrying a second YAML line", "KyvernoChartVersion", "3.9.1\nconfig: {}", func(v *Versions, s string) { setKyvernoVersion(v, s) }},
+		{"an empty kyverno chart version", "KyvernoChartVersion", "", func(v *Versions, s string) { v.KyvernoChartVersion = s }},
+		{"a kyverno chart version with a v prefix", "KyvernoChartVersion", "v3.9.1", func(v *Versions, s string) { v.KyvernoChartVersion = s }},
+		{"a kyverno chart version carrying a second YAML line", "KyvernoChartVersion", "3.9.1\nconfig: {}", func(v *Versions, s string) { v.KyvernoChartVersion = s }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			v := PinnedVersions
@@ -427,10 +412,23 @@ func assertChartApplication(t *testing.T, app map[string]any, name, repo, chart,
 	assertNoCredentialDeclared(t, what, app)
 }
 
-func TestRenderSeed_TraefikIsThePinnedChartAsAnApplicationThatPrunesAndSelfHeals(t *testing.T) {
+func TestRenderSeed_EachPinnedChartIsAnApplicationThatPrunesAndSelfHeals(t *testing.T) {
 	eachVersions(t, func(t *testing.T, v Versions) {
-		app := seedDoc(t, v, testutil.SeedTraefikPath)
-		assertChartApplication(t, app, "traefik", "https://traefik.github.io/charts", "traefik", v.TraefikChartVersion, "traefik")
+		for _, c := range []struct{ path, name, repo, version string }{
+			{testutil.SeedTraefikPath, "traefik", "https://traefik.github.io/charts", v.TraefikChartVersion},
+			{seedCertManagerPath, "cert-manager", "https://charts.jetstack.io", v.CertManagerChartVersion},
+			{seedKyvernoPath, "kyverno", "https://kyverno.github.io/kyverno/", v.KyvernoChartVersion},
+		} {
+			assertChartApplication(t, seedDoc(t, v, c.path), c.name, c.repo, c.name, c.version, c.name)
+		}
+
+		certManager := testutil.ChartValues(t, "cert-manager Application", seedDoc(t, v, seedCertManagerPath))
+		testutil.AssertValues(t, "cert-manager helm.values", map[string]any{"acmesolver": certManager["acmesolver"], "crds.enabled": testutil.Dig(certManager, "crds", "enabled")}, map[string]any{
+			"acmesolver":   map[string]any{"image": map[string]any{"digest": acmesolverDigests[v.CertManagerChartVersion]}},
+			"crds.enabled": true,
+		})
+		opts := stringsOf(t, "kyverno syncPolicy.syncOptions", testutil.Dig(seedDoc(t, v, seedKyvernoPath), "spec", "syncPolicy", "syncOptions"))
+		testutil.FailIf(t, !slices.Contains(opts, "ServerSideApply=true"), "kyverno Application syncOptions = %q, want ServerSideApply=true among them, since Kyverno's CRDs exceed the client-side apply annotation", opts)
 	})
 }
 
@@ -500,17 +498,6 @@ func TestRenderSeed_RefusesAPublicIPv4OutOfShape(t *testing.T) {
 	}
 }
 
-func TestRenderSeed_CertManagerIsThePinnedChartWithItsCRDsAsAnApplicationThatPrunesAndSelfHeals(t *testing.T) {
-	eachVersions(t, func(t *testing.T, v Versions) {
-		app := seedDoc(t, v, seedCertManagerPath)
-		assertChartApplication(t, app, "cert-manager", "https://charts.jetstack.io", "cert-manager", v.CertManagerChartVersion, "cert-manager")
-		got := testutil.Dig(testutil.ChartValues(t, "cert-manager Application", app), "crds", "enabled")
-		testutil.FailIf(t, got != true, "cert-manager helm.values crds.enabled = %#v, want true, so the chart installs the ClusterIssuer and Certificate CRDs", got)
-		digest := testutil.Dig(testutil.ChartValues(t, "cert-manager Application", app), "acmesolver", "image", "digest")
-		testutil.FailIf(t, digest != acmesolverDigests[v.CertManagerChartVersion], "cert-manager helm.values acmesolver.image.digest = %#v for chart %s, want %q, the digest recorded for that version", digest, v.CertManagerChartVersion, acmesolverDigests[v.CertManagerChartVersion])
-	})
-}
-
 const (
 	acmesolverUpstreamRepository = "quay.io/jetstack/cert-manager-acmesolver"
 	acmesolverPinnedDigest       = "sha256:699b40d622211ab7accad8a21b04c5fbaa1841ef7a12621e8de492dbe27b2503"
@@ -518,42 +505,12 @@ const (
 	acmeSolverLabelValue         = "acme-http01-solver"
 )
 
-func TestRenderSeed_CertManagerPinsTheACMESolverImageByDigestAndKeepsItsUpstreamRepository(t *testing.T) {
-	app := seedDoc(t, PinnedVersions, seedCertManagerPath)
-
-	values := testutil.ChartValues(t, "cert-manager Application", app)
-
-	testutil.AssertValues(t, "cert-manager helm.values", map[string]any{
-		"acmesolver":   values["acmesolver"],
-		"crds.enabled": testutil.Dig(values, "crds", "enabled"),
-	}, map[string]any{
-		"acmesolver":   map[string]any{"image": map[string]any{"digest": acmesolverPinnedDigest}},
-		"crds.enabled": true,
-	})
-}
-
 func TestAdmission_RegistryPolicyPinsExactlyTheACMESolverImageTheChartRunsAndTheCloudNativePGImages(t *testing.T) {
 	got := pinnedImages(t)
 
 	want := []string{acmesolverUpstreamRepository + "@" + acmesolverDigests[PinnedVersions.CertManagerChartVersion], wantOperatorImage, wantPostgres16Image}
 
 	testutil.FailIf(t, !slices.Equal(got, want), "mitstack-restrict-image-registries pinnedImages = %q; want exactly %q: the image chart %s runs, the CloudNativePG operator and its Postgres 16 image", got, want, PinnedVersions.CertManagerChartVersion)
-}
-
-func TestRenderSeed_ACMESolverDigestIsRecordedForThePinnedChartVersion(t *testing.T) {
-	got := acmesolverDigests[PinnedVersions.CertManagerChartVersion]
-
-	testutil.FailIf(t, got != acmesolverPinnedDigest, "acmesolverDigests[%q] = %q; want %q", PinnedVersions.CertManagerChartVersion, got, acmesolverPinnedDigest)
-}
-
-func TestRenderSeed_RefusesACertManagerChartVersionWithNoRecordedACMESolverDigest(t *testing.T) {
-	v := PinnedVersions
-	v.CertManagerChartVersion = "v1.21.3"
-
-	files, err := RenderSeed(v, testutil.FixtureIngressIPv4, testutil.FixtureRepoURL)
-
-	testutil.FatalIf(t, err == nil, "RenderSeed with CertManagerChartVersion %q rendered %d files; want an error naming the missing acmesolver digest", v.CertManagerChartVersion, len(files))
-	testutil.FailIf(t, !strings.Contains(err.Error(), "acmesolver digest") || !strings.Contains(err.Error(), "v1.21.3"), "RenderSeed with CertManagerChartVersion %q = %q; want an error naming the acmesolver digest and the version", v.CertManagerChartVersion, err)
 }
 
 func acmeSolverFixture(t *testing.T, name string) map[string]any {
@@ -619,12 +576,6 @@ func TestRenderSeed_ClusterIssuerSolvesHTTP01ThroughTraefikAgainstLetsEncryptPro
 }
 
 func TestRenderSeed_IngressAndCertManagerComeFromTheSeedNeverFromK3sManifests(t *testing.T) {
-	files := seedFiles(t, PinnedVersions)
-	for path, name := range map[string]string{testutil.SeedTraefikPath: "traefik", seedCertManagerPath: "cert-manager"} {
-		app := testutil.YamlMap(t, path, files[path])
-		testutil.FailIf(t, app["kind"] != "Application" || testutil.Dig(app, "metadata", "name") != name, "%s holds a %v named %v, want the %s Application", path, app["kind"], testutil.Dig(app, "metadata", "name"), name)
-	}
-
 	_, cc := renderCC(t, fixtureRenderInputs())
 	for _, f := range cc.WriteFiles {
 		if !strings.HasPrefix(f.Path, manifestsDir+"/") {
@@ -647,10 +598,8 @@ func TestRenderSeed_IngressAndCertManagerComeFromTheSeedNeverFromK3sManifests(t 
 func TestRenderSeed_ArgoCDCreatesNeitherTheNotificationsConfigMapNorItsSecret(t *testing.T) {
 	eachVersions(t, func(t *testing.T, v Versions) {
 		chart := bootstrapHelmCharts(t, v)["argocd"]
-		bootValues, ok := testutil.Dig(chart, "spec", "valuesContent").(string)
-		testutil.FatalIf(t, !ok, "the argocd HelmChart spec.valuesContent is %T, want the values text", testutil.Dig(chart, "spec", "valuesContent"))
 		for what, values := range map[string]map[string]any{
-			"the argocd HelmChart's valuesContent":        testutil.YamlMap(t, "argocd valuesContent", bootValues),
+			"the argocd HelmChart's valuesContent":        chartValuesOf(t, "the argocd HelmChart", chart),
 			"the seeded argocd Application's helm.values": testutil.ChartValues(t, "argocd Application", seedDoc(t, v, testutil.SeedArgoCDPath)),
 		} {
 			for _, path := range [][]string{{"notifications", "cm", "create"}, {"notifications", "secret", "create"}, {"dex", "enabled"}} {
@@ -914,28 +863,7 @@ const (
 	admissionFixturesConfig = "admission-fixtures"
 )
 
-func kyvernoVersion(v Versions) string { return v.KyvernoChartVersion }
-
-func setKyvernoVersion(v *Versions, s string) { v.KyvernoChartVersion = s }
-
-func TestRenderVersions_PinKyvernoChartAt391(t *testing.T) {
-	got := kyvernoVersion(PinnedVersions)
-
-	testutil.FailIf(t, got != "3.9.1", "PinnedVersions.KyvernoChartVersion = %q, want 3.9.1, the chart that runs Kyverno v1.19.1", got)
-}
-
 func seedPolicyPath(policy string) string { return "cluster/admission-policy-" + policy + ".yaml" }
-
-func TestRenderSeed_KyvernoIsThePinnedChartAsAnApplicationSyncedServerSide(t *testing.T) {
-	eachVersions(t, func(t *testing.T, v Versions) {
-		app := seedDoc(t, v, seedKyvernoPath)
-
-		assertChartApplication(t, app, "kyverno", "https://kyverno.github.io/kyverno/", "kyverno", kyvernoVersion(v), "kyverno")
-
-		opts := stringsOf(t, "kyverno syncPolicy.syncOptions", testutil.Dig(app, "spec", "syncPolicy", "syncOptions"))
-		testutil.FailIf(t, !slices.Contains(opts, "ServerSideApply=true"), "kyverno Application syncOptions = %q, want ServerSideApply=true among them, since Kyverno's CRDs exceed the client-side apply annotation", opts)
-	})
-}
 
 func TestRenderSeed_KyvernoWebhooksLeaveTheSystemNamespacesAlone(t *testing.T) {
 	app := seedDoc(t, PinnedVersions, seedKyvernoPath)

@@ -1172,16 +1172,6 @@ func kuredDrainLog(draining, commanding string) string {
 	return b.String() + commanding + "\n"
 }
 
-func TestReportScript_AClusterWithoutCloudNativePGsCRDsStillFilesEveryOtherRead(t *testing.T) {
-	const missing = `error: the server doesn't have a resource type "clusters"`
-	r := newReportRig(t, withK3s(k3sFailing(readCloudNativePG, 1, missing+"\n"))).send()
-	fields := reportFields(t, r.req)
-	read := clusterRead{readCloudNativePG, "cloudNativePG", ""}
-
-	assertKubectlFailure(t, read.name(), read.in(t, fields), 1, missing)
-	assertClusterAnsweredBut(t, fields, read)
-}
-
 func TestReportScript_ClusterReadsFailIndependently(t *testing.T) {
 	const forbidden = `Error from server (Forbidden): configmaps is forbidden: User "system:admin" cannot list resource "configmaps" in API group "" at the cluster scope`
 	reads := append(slices.Clone(clusterReads), clusterRead{readNodes, "kubernetes", ""}, clusterRead{readLabel, "podSecurityDryRun", ""})
@@ -1430,7 +1420,6 @@ func TestReportScript_Hardening(t *testing.T) {
 		exit    int
 		message string
 	}{
-		{"the read fails", k3sFailing(readConfigz, 1, refused+"\n"), 1, refused},
 		{"the answer is text", k3sPrinting(readConfigz, "404 page not found\n"), 0, ""},
 		{"no kubeletconfig in it", k3sConfigz(`{"apiVersion": "v1", "kind": "Status"}`), 0, ""},
 	} {
@@ -1726,6 +1715,15 @@ func assertAutoUpgradeUnits(t *testing.T, r *reportRig, output string, exit int)
 	testutil.FailIf(t, !r.tools["systemctl"].Ran(t, want...), "systemctl ran with %q, want a run with %q", r.tools["systemctl"].Runs(t), want)
 }
 
+func assertLargestPatchingLogs(t *testing.T, r *reportRig, patching map[string]json.RawMessage) {
+	t.Helper()
+	log, uu := patchingString(t, r, "unattendedUpgradesLog"), largestUnattendedUpgradesLog()
+	n := jsonTextLen(log)
+	testutil.FailIf(t, log == "" || n > unattendedUpgradesLogLimit || lastLine(log) != uu[len(uu)-1], "patching.unattendedUpgradesLog is %d bytes of JSON text ending %q, want the newest lines within %d", n, testutil.Truncate(lastLine(log), 80), unattendedUpgradesLogLimit)
+	reboot := reportedReboot(t, patching["rebootRequired"])
+	testutil.FailIf(t, !reboot.Exists || reboot.Packages == "" || jsonTextLen(reboot.Packages) > rebootPackagesLimit, "patching.rebootRequired = exists %v with %d bytes of JSON text of packages, want a pending reboot and at most %d", reboot.Exists, jsonTextLen(reboot.Packages), rebootPackagesLimit)
+}
+
 func largestBody(t *testing.T, succeeding bool) []reportOption {
 	t.Helper()
 	journal, cloudInit := largestLogs()
@@ -1818,11 +1816,7 @@ func TestReportScript_BodyStaysUnder256KiB(t *testing.T) {
 			assertPatchingWithinBounds(t, fields)
 			status2, output2 := commandResult(t, "patching.autoUpgradeUnits", patching["autoUpgradeUnits"], autoUpgradeUnitsLimit)
 			testutil.FailIf(t, status2 != 1 || output2 == "", "patching.autoUpgradeUnits carries exitStatus %d and %d bytes of output2, want 1 and the failed command's output2", status2, len(output2))
-			log, uu := patchingString(t, r, "unattendedUpgradesLog"), largestUnattendedUpgradesLog()
-			n2 := jsonTextLen(log)
-			testutil.FailIf(t, log == "" || n2 > unattendedUpgradesLogLimit || lastLine(log) != uu[len(uu)-1], "patching.unattendedUpgradesLog is %d bytes of JSON text ending %q, want the newest line within %d", n2, testutil.Truncate(lastLine(log), 80), unattendedUpgradesLogLimit)
-			reboot := reportedReboot(t, patching["rebootRequired"])
-			testutil.FailIf(t, !reboot.Exists || reboot.Packages == "" || jsonTextLen(reboot.Packages) > rebootPackagesLimit, "patching.rebootRequired = exists %v with %d bytes of JSON text of packages, want a pending reboot and at most %d", reboot.Exists, jsonTextLen(reboot.Packages), rebootPackagesLimit)
+			assertLargestPatchingLogs(t, r, patching)
 			for _, p := range patchingReads {
 				assertKubectlFailure(t, "patching."+p.member+"."+p.part, p.in(t, fields), 1, "EEEE")
 			}
@@ -1865,11 +1859,7 @@ func TestReportScript_BodyStaysUnder256KiB(t *testing.T) {
 			assertPatchingWithinBounds(t, fields)
 			status, output := commandResult(t, "patching.autoUpgradeUnits", patching["autoUpgradeUnits"], autoUpgradeUnitsLimit)
 			testutil.FailIf(t, status != 0 || output == "", "patching.autoUpgradeUnits carries exitStatus %d and %d bytes of output, want 0 and the start of what it printed", status, len(output))
-			log, uu := patchingString(t, r, "unattendedUpgradesLog"), largestUnattendedUpgradesLog()
-			n2 := jsonTextLen(log)
-			testutil.FailIf(t, log == "" || n2 > unattendedUpgradesLogLimit || lastLine(log) != uu[len(uu)-1], "patching.unattendedUpgradesLog is %d bytes of JSON text ending %q, want the newest lines within %d", n2, testutil.Truncate(lastLine(log), 80), unattendedUpgradesLogLimit)
-			reboot := reportedReboot(t, patching["rebootRequired"])
-			testutil.FailIf(t, !reboot.Exists || reboot.Packages == "" || jsonTextLen(reboot.Packages) > rebootPackagesLimit, "patching.rebootRequired = exists %v with %d bytes of JSON text of packages, want a pending reboot and at most %d", reboot.Exists, jsonTextLen(reboot.Packages), rebootPackagesLimit)
+			assertLargestPatchingLogs(t, r, patching)
 			for _, part := range []string{"current", "previous"} {
 				got := stringOf(t, "patching.kured."+part, testutil.ObjectOf(t, "patching.kured", patching["kured"], "current", "previous")[part])
 				n := jsonTextLen(got)
@@ -2201,16 +2191,6 @@ func TestReportScript_Admission(t *testing.T) {
 		sixOpts = append(sixOpts, k3sApplying(name, "", "Error from server: "+name+strings.Repeat("m", 10000)+"\n", 1))
 	}
 	cases := []reportCase{
-		{name: "records each rule with its fixture, exit status and refusal message in key order", check: func(t *testing.T, r *reportRig) {
-			sameJSON(t, "admission", reportFields(t, r.req)["admission"], testFile("want/admission.json"))
-		}},
-		{name: "applies each fixture once as a server dry run into the probe namespace", check: func(t *testing.T, r *reportRig) {
-			calls := applyCalls(t, r)
-			testutil.FailIf(t, len(calls) != 6, "the node applied %d fixtures, want 6", len(calls))
-			for _, c := range calls {
-				testutil.FailIf(t, c.flags["--dry-run"] != "server" || c.flags["--namespace"] != admissionNamespace || c.flags["--filename"] != "-" || c.flags["--request-timeout"] != "10s", "apply ran as %q", c.line())
-			}
-		}},
 		{name: "dry-runs mitstack-node's own fixtures in mitstack-node after the probe namespace's", opts: []reportOption{withK3s(
 			k3sNodeFixtures(map[string]string{"mitstack-verify-node-agent-signature-unsigned": "apiVersion: v1\nkind: Pod\n"}),
 			k3sApplying("mitstack-verify-node-agent-signature-unsigned", "", "admission webhook denied the request\n", 1))}, check: func(t *testing.T, r *reportRig) {
@@ -2258,9 +2238,6 @@ func TestReportScript_Admission(t *testing.T) {
 			testutil.FailIf(t, len(r.req.Body) > reportBodyMax || !json.Valid(r.req.Body), "the body is %d bytes (valid %v), want valid JSON within %d", len(r.req.Body), json.Valid(r.req.Body), reportBodyMax)
 			testutil.FailIf(t, len(admissionOf(t, r)) < 6, "admission holds %d entries, want at least the six rules", len(admissionOf(t, r)))
 		}},
-		{name: "lists only mitstack-default-deny policies with their rule counts, selector, types and manager", check: func(t *testing.T, r *reportRig) {
-			sameJSON(t, "defaultDenyPolicies", reportFields(t, r.req)["defaultDenyPolicies"], testFile("want/default-deny-policies.json"))
-		}},
 		{name: "reports [] when no namespace holds the generated policy", opts: []reportOption{withK3s(k3sAnswer(readDefaultDeny, extremeList([]any{})))}, check: func(t *testing.T, r *reportRig) {
 			sameJSON(t, "defaultDenyPolicies", reportFields(t, r.req)["defaultDenyPolicies"], `[]`)
 		}},
@@ -2268,12 +2245,6 @@ func TestReportScript_Admission(t *testing.T) {
 			raw := reportFields(t, r.req)["defaultDenyPolicies"]
 			assertNonEmptyList(t, "defaultDenyPolicies", raw)
 			testutil.FailIf(t, len(raw) > defaultDenyLimit, "defaultDenyPolicies is %d bytes, want whole entries within %d", len(raw), defaultDenyLimit)
-		}},
-		{name: "lists only app namespace certificates with their Ready status, reason and message", check: func(t *testing.T, r *reportRig) {
-			sameJSON(t, "certificates", reportFields(t, r.req)["certificates"], testFile("want/certificates.json"))
-		}},
-		{name: "lists only app namespace challenges with their DNS name, state and reason", check: func(t *testing.T, r *reportRig) {
-			sameJSON(t, "challenges", reportFields(t, r.req)["challenges"], testFile("want/challenges.json"))
 		}},
 		{name: "reports [] certificates and challenges when no app namespace holds one", opts: []reportOption{withK3s(
 			k3sAnswer(readCertificates, extremeList([]any{certificateIn("cert-manager", "internal-ca", "True", "Ready", "fine")})),

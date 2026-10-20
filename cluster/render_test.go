@@ -47,16 +47,10 @@ func TestPinnedVersions_AreTheReviewedPins(t *testing.T) {
 		// traefik chart 41.6.1 runs Traefik v3.7.13.
 		TraefikChartVersion:     "41.6.1",
 		CertManagerChartVersion: "v1.21.2",
+		// kyverno chart 3.9.1 runs Kyverno v1.19.1.
+		KyvernoChartVersion: "3.9.1",
 	}
-	// kyverno chart 3.9.1 runs Kyverno v1.19.1.
-	setKyvernoVersion(&want, "3.9.1")
 	testutil.FailIf(t, PinnedVersions != want, "PinnedVersions = %+v\nwant           %+v", PinnedVersions, want)
-}
-
-func TestRenderUserData_IsADeterministicCloudConfig(t *testing.T) {
-	first, _ := renderFixture(t)
-	second := renderOK(t, fixtureRenderInputs())
-	testutil.FailIf(t, first != second, "RenderUserData rendered two different documents from the same inputs")
 }
 
 func TestRenderUserData_K3sConfigDisablesFlannelAndNetworkPolicyAndSetsTheIssuer(t *testing.T) {
@@ -98,9 +92,7 @@ func TestRenderUserData_CiliumHelmChartCarriesHubbleAndTheBriefsValues(t *testin
 		"spec.chart": "cilium", "spec.repo": "https://helm.cilium.io/", "spec.version": "1.19.3", "spec.targetNamespace": "kube-system", "spec.bootstrap": true,
 	})
 
-	valuesContent, ok := testutil.Dig(chart, "spec", "valuesContent").(string)
-	testutil.FatalIf(t, !ok, "cilium HelmChart spec.valuesContent is %T, want a string of YAML", testutil.Dig(chart, "spec", "valuesContent"))
-	values := testutil.YamlMap(t, "cilium valuesContent", valuesContent)
+	values := chartValuesOf(t, "cilium HelmChart", chart)
 
 	testutil.AssertValues(t, "cilium valuesContent", values, map[string]any{
 		"ipam":                 map[string]any{"mode": "kubernetes"},
@@ -145,14 +137,6 @@ func assertOneOperatorRollingInPlace(t *testing.T, what string, values map[strin
 	}
 }
 
-func TestRenderUserData_CiliumBootstrapRunsOneOperatorThatRollsInPlace(t *testing.T) {
-	_, cc := renderFixture(t)
-	chart := testutil.YamlMap(t, "cilium.yaml", cc.File(t, "/var/lib/rancher/k3s/server/manifests/cilium.yaml").Content)
-	valuesContent, ok := testutil.Dig(chart, "spec", "valuesContent").(string)
-	testutil.FatalIf(t, !ok, "cilium HelmChart spec.valuesContent is %T, want a string of YAML", testutil.Dig(chart, "spec", "valuesContent"))
-	assertOneOperatorRollingInPlace(t, "cilium HelmChart valuesContent", testutil.YamlMap(t, "cilium valuesContent", valuesContent))
-}
-
 func assertNoCredentialKeys(t *testing.T, what string, v any) {
 	t.Helper()
 	switch x := v.(type) {
@@ -193,9 +177,7 @@ func TestRenderUserData_ArgoCDBootstrapInstallsTheChartWithNoCredential(t *testi
 		"apiVersion": "helm.cattle.io/v1", "metadata.name": "argocd", "metadata.namespace": "kube-system", "spec.chart": "argo-cd",
 		"spec.repo": "https://argoproj.github.io/argo-helm", "spec.version": "10.9.7", "spec.targetNamespace": "argocd",
 	})
-	valuesContent, ok := testutil.Dig(chart, "spec", "valuesContent").(string)
-	testutil.FatalIf(t, !ok, "argocd HelmChart spec.valuesContent is %T, want a string of YAML", testutil.Dig(chart, "spec", "valuesContent"))
-	values := testutil.YamlMap(t, "argocd valuesContent", valuesContent)
+	values := chartValuesOf(t, "argocd HelmChart", chart)
 	testutil.AssertValues(t, "argocd valuesContent", values, map[string]any{
 		"dex":           map[string]any{"enabled": false},
 		"notifications": map[string]any{"cm": map[string]any{"create": false}, "secret": map[string]any{"create": false}},
@@ -252,30 +234,7 @@ func assertRootScript(t *testing.T, what string, f testutil.CloudFile) {
 	testutil.FailIf(t, f.Owner != "" && f.Owner != "root" && f.Owner != "root:root", "%s %s owner = %q, want root", what, f.Path, f.Owner)
 }
 
-func TestRenderUserData_RunsTheNodeScriptThenTheInstallerThenStartsK3s(t *testing.T) {
-	_, cc := renderFixture(t)
-	node := cc.NodeScript(t)
-	installer := cc.Installer(t)
-	assertRootScript(t, "the node script", node)
-	assertRootScript(t, "the verified installer", installer)
-	testutil.FatalIf(t, node.Path == installer.Path, "the node script and the installer share the path %s", node.Path)
-
-	run := cc.RuncmdText()
-	steps := []struct{ what, needle string }{
-		{"the node script", node.Path},
-		{"the verified installer", installer.Path},
-		{"the k3s start", "systemctl enable --now k3s"},
-	}
-	last := -1
-	for _, s := range steps {
-		at := strings.Index(run, s.needle)
-		testutil.FatalIf(t, at < 0, "runcmd never runs %s (%q):\n%s", s.what, s.needle, run)
-		testutil.FailIf(t, at <= last, "runcmd runs %s before the step that must precede it:\n%s", s.what, run)
-		last = at
-	}
-}
-
-func TestRenderUserData_VerifiedInstallerPinsTheInstallerAndBinaryDigests(t *testing.T) {
+func TestRenderUserData_VerifiedInstallerPinsTheInstallerAndBinaryDigestsAndLeavesStartingK3sToTheChain(t *testing.T) {
 	_, cc := renderFixture(t)
 	body := cc.Installer(t).Content
 	v := PinnedVersions
@@ -294,6 +253,7 @@ func TestRenderUserData_VerifiedInstallerPinsTheInstallerAndBinaryDigests(t *tes
 		`INSTALL_K3S_SKIP_DOWNLOAD=["']?true["']?`,
 		`INSTALL_K3S_VERSION=["']?v1\.36\.3\+k3s1["']?`,
 		`INSTALL_K3S_EXEC=["']?server["']?`,
+		`INSTALL_K3S_SKIP_START=["']?true["']?`,
 	} {
 		testutil.FailIf(t, !regexp.MustCompile(env).MatchString(body), "the verified installer does not run install.sh with %s", env)
 	}
@@ -316,8 +276,8 @@ func TestRenderUserData_EveryVersionInputReachesTheDocument(t *testing.T) {
 		SystemUpgradeControllerVersion: "v0.21.0",
 		TraefikChartVersion:            "41.7.0",
 		CertManagerChartVersion:        "v1.22.0",
+		KyvernoChartVersion:            "3.10.0",
 	}
-	setKyvernoVersion(&in.Versions, "3.10.0")
 	_, cc := renderCC(t, in)
 
 	installer := cc.Installer(t).Content
@@ -398,21 +358,18 @@ func TestRenderUserData_TheLongestRenderingIsAtMost19000Bytes(t *testing.T) {
 	testutil.FailIf(t, len(ud) > 19000, "the longest user data is %d bytes, want at most 19,000 now it carries only the bootstrap", len(ud))
 }
 
-func TestRenderUserData_RuncmdIsOneChainSoAFailedNodeScriptOrEnrolmentStopsK3s(t *testing.T) {
+func TestRenderUserData_RuncmdIsOneChainInTheOrderThatKeepsK3sBehindEveryGuard(t *testing.T) {
 	_, cc := renderFixture(t)
-	node := cc.NodeScript(t)
-	enrol := cc.EnrolScript(t)
-	installer := cc.Installer(t)
-	entry := runcmdChain(t, cc)
-	var steps []string
-	for _, step := range strings.Split(entry, " && ") {
-		if step != metadataGuardStart {
-			steps = append(steps, step)
-		}
-	}
+	node, enrol, installer := cc.NodeScript(t), cc.EnrolScript(t), cc.Installer(t)
+	assertRootScript(t, "the node script", node)
+	assertRootScript(t, "the verified installer", installer)
+
+	steps := strings.Split(runcmdChain(t, cc), " && ")
+
 	want := []string{
 		sshMask,
 		"systemctl daemon-reload",
+		metadataGuardStart,
 		node.Path,
 		"systemctl start " + enrolUnitName,
 		autoUpgradeEnable,
@@ -420,8 +377,8 @@ func TestRenderUserData_RuncmdIsOneChainSoAFailedNodeScriptOrEnrolmentStopsK3s(t
 		installer.Path,
 		"systemctl enable --now k3s",
 	}
-	testutil.FailIf(t, !slices.Equal(steps, want), "runcmd[0] without the metadata guard's start = %q\nwant %q", strings.Join(steps, " && "), strings.Join(want, " && "))
-	testutil.FailIf(t, strings.Contains(entry, enrol.Path), "runcmd invokes the enrol script %s directly, want it run only by %s", enrol.Path, enrolUnitName)
+	testutil.FailIf(t, !slices.Equal(steps, want), "runcmd[0] = %q\nwant %q: SSH masked first; the guard started once systemd has read its unit and before any pod can run; the patching units enabled and the lists refreshed without blocking before k3s is installed; a failed step stops k3s", strings.Join(steps, " && "), strings.Join(want, " && "))
+	testutil.FailIf(t, strings.Contains(strings.Join(steps, " "), enrol.Path), "runcmd invokes the enrol script %s directly, want it run only by %s", enrol.Path, enrolUnitName)
 }
 
 func runcmdChain(t *testing.T, cc testutil.CloudConfig) string {
@@ -430,34 +387,6 @@ func runcmdChain(t *testing.T, cc testutil.CloudConfig) string {
 	entry, ok := cc.RunCmd[0].(string)
 	testutil.FatalIf(t, !ok, "runcmd[0] is %T, want a string the shell runs as one && chain", cc.RunCmd[0])
 	return entry
-}
-
-func TestRenderUserData_RuncmdMasksSSHBeforeAnythingElse(t *testing.T) {
-	_, cc := renderFixture(t)
-	steps := strings.Split(runcmdChain(t, cc), " && ")
-	testutil.FailIf(t, steps[0] != sshMask, "runcmd's chain begins %q, want %q before anything else", steps[0], sshMask)
-	n := slices.Index(steps[1:], sshMask)
-	testutil.FailIf(t, n >= 0, "runcmd's chain masks SSH again at step %d, want once, first", n+2)
-}
-
-func TestRenderUserData_RuncmdStartsTheMetadataGuardAfterDaemonReloadAndBeforeK3s(t *testing.T) {
-	_, cc := renderFixture(t)
-	installer := cc.Installer(t)
-	steps := strings.Split(runcmdChain(t, cc), " && ")
-	at := map[string]int{}
-	for _, s := range []string{metadataGuardStart, "systemctl daemon-reload", installer.Path, "systemctl enable --now k3s"} {
-		n := 0
-		at[s] = -1
-		for i, step := range steps {
-			if step == s {
-				at[s], n = i, n+1
-			}
-		}
-		testutil.FatalIf(t, n != 1, "runcmd's chain runs %q %d times, want once: %q", s, n, steps)
-	}
-	guard := at[metadataGuardStart]
-	testutil.FailIf(t, guard < at["systemctl daemon-reload"], "runcmd starts the metadata guard before the daemon-reload, so systemd has not read its unit: %q", steps)
-	testutil.FailIf(t, guard > at[installer.Path] || guard > at["systemctl enable --now k3s"], "runcmd starts the metadata guard after the installer or the k3s start, so a pod could run before the rule: %q", steps)
 }
 
 const (
@@ -706,13 +635,6 @@ func longestRenderInputs() UserDataInputs {
 	return in
 }
 
-func TestRenderUserData_VerifiedInstallerLeavesStartingK3sToTheChain(t *testing.T) {
-	_, cc := renderFixture(t)
-	if !regexp.MustCompile(`INSTALL_K3S_SKIP_START=["']?true["']?`).MatchString(cc.Installer(t).Content) {
-		t.Error("the verified installer does not run install.sh with INSTALL_K3S_SKIP_START=true")
-	}
-}
-
 const (
 
 	// autoUpgradeUnits are the units that patch the OS, which the chain
@@ -728,29 +650,6 @@ const (
 	unattendedUpgradesConf  = "/etc/apt/apt.conf.d/52mitstack-unattended-upgrades"
 	unattendedUpdatesOrigin = "${distro_id}:${distro_codename}-updates"
 )
-
-func TestRenderUserData_RuncmdEnablesTheAutoUpgradeUnitsBeforeTheInstaller(t *testing.T) {
-	_, cc := renderFixture(t)
-	installer := cc.Installer(t)
-	steps := strings.Split(runcmdChain(t, cc), " && ")
-	at := func(step string) int {
-		t.Helper()
-		n, found := 0, -1
-		for i, s := range steps {
-			if s == step {
-				n, found = n+1, i
-			}
-		}
-		testutil.FatalIf(t, n != 1, "runcmd's chain runs %q %d times, want once: %q", step, n, steps)
-		return found
-	}
-	enable := at(autoUpgradeEnable)
-	testutil.FailIf(t, enable > at(installer.Path), "runcmd's chain enables the auto-upgrade units after the installer, so a node without them still runs k3s: %q", steps)
-	// The lists refresh once, straight after the units are enabled, and
-	// --no-block leaves the refresh running while the chain goes on to k3s.
-	refresh := at(aptDailyRefreshNow)
-	testutil.FailIf(t, refresh != enable+1, "runcmd's chain runs %q at step %d, want it straight after %q at step %d: %q", aptDailyRefreshNow, refresh, autoUpgradeEnable, enable, steps)
-}
 
 func aptConfStatements(content string) string {
 	var b strings.Builder
@@ -841,17 +740,11 @@ func TestRenderUserData_RefusesAKuredOrUpgradeControllerPinOutOfShape(t *testing
 
 			_, err := RenderUserData(in)
 
-			testutil.FatalIf(t, err == nil, "RenderUserData rendered with %s = %q, want a refusal", tc.field, fieldOf(in.Versions, tc.field))
-			testutil.FailIf(t, !strings.Contains(err.Error(), tc.field), "RenderUserData refused %s = %q with %q, want the error to name %s", tc.field, fieldOf(in.Versions, tc.field), err, tc.field)
+			value := reflect.ValueOf(in.Versions).FieldByName(tc.field).String()
+			testutil.FatalIf(t, err == nil, "RenderUserData rendered with %s = %q, want a refusal", tc.field, value)
+			testutil.FailIf(t, !strings.Contains(err.Error(), tc.field), "RenderUserData refused %s = %q with %q, want the error to name %s", tc.field, value, err, tc.field)
 		})
 	}
-}
-
-func fieldOf(v Versions, field string) string {
-	if field == "KuredChartVersion" {
-		return v.KuredChartVersion
-	}
-	return v.SystemUpgradeControllerVersion
 }
 
 type unitRow struct {

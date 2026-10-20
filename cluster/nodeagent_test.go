@@ -165,8 +165,8 @@ func TestNodeAgentSeed_RunsThePinnedImageWithAnAPITokenOnlyInTheReportContainer(
 			}
 		}
 	}
-	testutil.FailIf(t, !slicesEqualSet(mounts["report"], "host-evidence", "report-token", "api-token", "tmp"), "the report container mounts %v", mounts["report"])
-	testutil.FailIf(t, !slicesEqualSet(mounts["host"], "host-evidence"), "the host container mounts %v, want only host-evidence, so it holds no token of its own", mounts["host"])
+	testutil.FailIf(t, !slices.Equal(slices.Sorted(slices.Values(mounts["report"])), []string{"api-token", "host-evidence", "report-token", "tmp"}), "the report container mounts %v", mounts["report"])
+	testutil.FailIf(t, !slices.Equal(mounts["host"], []string{"host-evidence"}), "the host container mounts %v, want only host-evidence, so it holds no token of its own", mounts["host"])
 }
 
 // kubectl skips the in-cluster config whenever a flag such as --request-timeout
@@ -224,22 +224,6 @@ func TestNodeAgentSeed_TheProbeJobAsksForTheUserDataAt0_2And10SecondsAndDiscards
 	testutil.FatalIf(t, len(command) == 0, "the seed holds no metadata probe Job with a command")
 
 	runProbePodCommand(t, command)
-}
-
-func slicesEqualSet(got []string, want ...string) bool {
-	if len(got) != len(want) {
-		return false
-	}
-	seen := map[string]bool{}
-	for _, g := range got {
-		seen[g] = true
-	}
-	for _, w := range want {
-		if !seen[w] {
-			return false
-		}
-	}
-	return true
 }
 
 var probeLineRe = regexp.MustCompile(`^t=([0-9]+)s (.+): http=([0-9]{3}) bytes=([0-9]+)$`)

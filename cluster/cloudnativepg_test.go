@@ -35,12 +35,13 @@ func filesUnder(t *testing.T, seed map[string]string, dir string) map[string]str
 	return files
 }
 
-func cloudNativePGDocs(t *testing.T) []map[string]any {
+func docsUnder(t *testing.T, seed map[string]string, dir string) []map[string]any {
 	t.Helper()
-	files := filesUnder(t, renderGoldenSeedWithClusterBases(t), wantCloudNativePGDir)
+	files := filesUnder(t, seed, dir)
+	testutil.FatalIf(t, len(files) == 0, "the seed writes nothing under %s/", dir)
 	var docs []map[string]any
 	for _, name := range slices.Sorted(maps.Keys(files)) {
-		docs = append(docs, testutil.YamlDocs(t, wantCloudNativePGDir+"/"+name, files[name])...)
+		docs = append(docs, testutil.YamlDocs(t, dir+"/"+name, files[name])...)
 	}
 	return docs
 }
@@ -66,7 +67,7 @@ func pinnedImages(t *testing.T) []string {
 
 func TestSeed_TheCloudNativePGOperatorRunsThePinnedOperatorImage(t *testing.T) {
 	var deployments []map[string]any
-	for _, doc := range cloudNativePGDocs(t) {
+	for _, doc := range docsUnder(t, renderGoldenSeedWithClusterBases(t), wantCloudNativePGDir) {
 		if doc["kind"] == "Deployment" {
 			deployments = append(deployments, doc)
 		}
@@ -287,14 +288,21 @@ func everyServerSeed(t *testing.T) map[string]func(t *testing.T) map[string]stri
 	return map[string]func(t *testing.T) map[string]string{"a Cloud server": cloudSeed, "a dedicated server": dedicatedSeed}
 }
 
-func TestSeed_EveryServersRepositoryCarriesCloudNativePGAsTheClusterBasesReleaseHoldsIt(t *testing.T) {
-	for server, seed := range everyServerSeed(t) {
-		t.Run(server, func(t *testing.T) {
-			files := filesUnder(t, seed(t), wantCloudNativePGDir)
+func TestSeed_CarriesEachClusterBasesComponentAsTheReleaseHoldsIt(t *testing.T) {
+	for _, c := range []struct {
+		server, dir, tree string
+		seed              func(t *testing.T) map[string]string
+	}{
+		{"a Cloud server", wantCloudNativePGDir, wantCloudNativePGTree, cloudSeed},
+		{"a dedicated server", wantCloudNativePGDir, wantCloudNativePGTree, dedicatedSeed},
+		{"a dedicated server", wantLocalPVLVMDir, wantLocalPVLVMTree, dedicatedSeed},
+	} {
+		t.Run(c.server+" "+c.dir, func(t *testing.T) {
+			files := filesUnder(t, c.seed(t), c.dir)
 
-			testutil.FatalIf(t, len(files) == 0, "%s's seed writes nothing under %s/, want cluster-bases %s's cloudnative-pg directory", server, wantCloudNativePGDir, wantClusterBasesTag)
 			got := gitTreeID(files)
-			testutil.FailIf(t, got != wantCloudNativePGTree, "the seed's %s/ is git tree %s holding %v, want %s, the tree of cloudnative-pg at cluster-bases %s", wantCloudNativePGDir, got, slices.Sorted(maps.Keys(files)), wantCloudNativePGTree, wantClusterBasesTag)
+
+			testutil.FailIf(t, len(files) == 0 || got != c.tree, "%s's %s/ is git tree %s holding %v, want %s, that directory's tree at cluster-bases %s", c.server, c.dir, got, slices.Sorted(maps.Keys(files)), c.tree, wantClusterBasesTag)
 		})
 	}
 }

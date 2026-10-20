@@ -3,8 +3,6 @@ package cluster
 // localpvlvm_test.go pins the storage a dedicated server's seed carries.
 
 import (
-	"maps"
-	"slices"
 	"strings"
 	"testing"
 
@@ -17,29 +15,6 @@ const (
 	wantLocalPVLVMApplication = "cluster/localpv-lvm.yaml"
 	wantLocalPVLVMDir         = "cluster-bases/localpv-lvm"
 )
-
-func localPVLVMFiles(t *testing.T, seed map[string]string) map[string]string {
-	t.Helper()
-	files := map[string]string{}
-	for p, content := range seed {
-		if rest, ok := strings.CutPrefix(p, wantLocalPVLVMDir+"/"); ok {
-			testutil.FatalIf(t, strings.Contains(rest, "/"), "the seed writes %s in a subdirectory of %s, want the component's files flat as cluster-bases holds them", p, wantLocalPVLVMDir)
-			files[rest] = content
-		}
-	}
-	return files
-}
-
-func componentDocs(t *testing.T, seed map[string]string) []map[string]any {
-	t.Helper()
-	files := localPVLVMFiles(t, seed)
-	testutil.FatalIf(t, len(files) == 0, "a dedicated server's seed writes nothing under %s/", wantLocalPVLVMDir)
-	var docs []map[string]any
-	for _, name := range slices.Sorted(maps.Keys(files)) {
-		docs = append(docs, testutil.YamlDocs(t, wantLocalPVLVMDir+"/"+name, files[name])...)
-	}
-	return docs
-}
 
 // podImages lists the image of every container and init container in a workload's pod template.
 func podImages(doc map[string]any) []string {
@@ -55,43 +30,25 @@ func podImages(doc map[string]any) []string {
 	return images
 }
 
-func TestSeed_ADedicatedServersRepositoryCarriesLocalPVLVMAsTheClusterBasesReleaseHoldsIt(t *testing.T) {
-	files := localPVLVMFiles(t, dedicatedSeed(t))
-
-	testutil.FatalIf(t, len(files) == 0, "a dedicated server's seed writes nothing under %s/, want cluster-bases %s's localpv-lvm directory", wantLocalPVLVMDir, wantClusterBasesTag)
-	got := gitTreeID(files)
-	testutil.FailIf(t, got != wantLocalPVLVMTree, "the seed's %s/ is git tree %s holding %v, want %s, the tree of localpv-lvm at cluster-bases %s", wantLocalPVLVMDir, got, slices.Sorted(maps.Keys(files)), wantLocalPVLVMTree, wantClusterBasesTag)
-}
-
 func TestSeed_ADedicatedServersRepositorySyncsLocalPVLVMIntoKubeSystemAtTheClusterBasesTag(t *testing.T) {
 	seed := dedicatedSeed(t)
 
 	content, ok := seed[wantLocalPVLVMApplication]
 	testutil.FatalIf(t, !ok, "a dedicated server's seed writes no %s", wantLocalPVLVMApplication)
 	app := testutil.YamlMap(t, wantLocalPVLVMApplication, content)
-	for _, c := range []struct {
-		path []string
-		want any
-	}{
-		{[]string{"kind"}, "Application"},
-		{[]string{"metadata", "name"}, "localpv-lvm"},
-		{[]string{"metadata", "namespace"}, "argocd"},
-		{[]string{"metadata", "annotations", "mitstack.dev/cluster-bases-tag"}, wantClusterBasesTag},
-		{[]string{"spec", "source", "repoURL"}, testutil.FixtureRepoURL},
-		{[]string{"spec", "source", "path"}, wantLocalPVLVMDir},
-		{[]string{"spec", "source", "targetRevision"}, "HEAD"},
-		{[]string{"spec", "destination", "server"}, "https://kubernetes.default.svc"},
-		{[]string{"spec", "destination", "namespace"}, "kube-system"},
-		{[]string{"spec", "syncPolicy", "automated", "prune"}, true},
-		{[]string{"spec", "syncPolicy", "automated", "selfHeal"}, true},
-	} {
-		got := testutil.Dig(app, c.path...)
-		testutil.FailIf(t, got != c.want, "%s %s = %#v, want %#v", wantLocalPVLVMApplication, strings.Join(c.path, "."), got, c.want)
-	}
+
+	testutil.AssertPaths(t, wantLocalPVLVMApplication, app, map[string]any{
+		"kind": "Application", "metadata.name": "localpv-lvm", "metadata.namespace": "argocd",
+		"spec.source.repoURL": testutil.FixtureRepoURL, "spec.source.path": wantLocalPVLVMDir, "spec.source.targetRevision": "HEAD",
+		"spec.destination.server": "https://kubernetes.default.svc", "spec.destination.namespace": "kube-system",
+		"spec.syncPolicy.automated.prune": true, "spec.syncPolicy.automated.selfHeal": true,
+	})
+	tag := testutil.Dig(app, "metadata", "annotations", "mitstack.dev/cluster-bases-tag")
+	testutil.FailIf(t, tag != wantClusterBasesTag, "%s's cluster-bases-tag annotation = %#v, want %s", wantLocalPVLVMApplication, tag, wantClusterBasesTag)
 }
 
 func TestSeed_ADedicatedServersLocalPVLVMNamesEveryImageByDigest(t *testing.T) {
-	docs := componentDocs(t, dedicatedSeed(t))
+	docs := docsUnder(t, dedicatedSeed(t), wantLocalPVLVMDir)
 
 	var images []string
 	for _, doc := range docs {
@@ -104,7 +61,7 @@ func TestSeed_ADedicatedServersLocalPVLVMNamesEveryImageByDigest(t *testing.T) {
 }
 
 func TestSeed_ADedicatedServersDefaultStorageClassIsLocalPVLVMOnVolumeGroupVg0(t *testing.T) {
-	docs := componentDocs(t, dedicatedSeed(t))
+	docs := docsUnder(t, dedicatedSeed(t), wantLocalPVLVMDir)
 
 	var defaults []map[string]any
 	for _, doc := range docs {
