@@ -48,6 +48,7 @@ func TestReportProof_PostsUnsignedAndExitsNonZeroWhenTheProofFails(t *testing.T)
 	}{
 		{"the proof script fails", withProofAnswer("echo 'error: serviceaccounts \"mitstack-node-report\" is forbidden' >&2; exit 1")},
 		{"the proof script prints nothing", withProofAnswer("true")},
+		{"the proof script prints a second line, which would become a header of its own", withProofAnswer("printf 'report-proof-fixture\\nX-Injected: yes\\n'")},
 		{"the pod carries no proof script", withProofScript("")},
 	} {
 		cases = append(cases, reportCase{name: tc.name, opts: []reportOption{tc.opt}, manual: true, check: func(t *testing.T, r *reportRig) {
