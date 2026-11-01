@@ -8,6 +8,6 @@ metadata:
 spec:
   containers:
   - name: agent
-    image: ghcr.io/mitstack-eu/mitstack-node-agent@sha256:2cba3ed4290db41b5f4ac6fe601b1a30c1c490f5c2847643b8a57eaba3d5a0bc
+    image: ghcr.io/mitstack-eu/mitstack-node-agent@sha256:364c33c09aacb1cbce69745a6e7dc9dbb7449f4c21f3ccb3e14616ce3a61a3f6
     resources:
       limits: {cpu: 100m, memory: 64Mi}

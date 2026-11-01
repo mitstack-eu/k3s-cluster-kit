@@ -1,6 +1,6 @@
 # The node report, the repository-token refresh and the metadata probe, with
 # the rights ADR 0087 grants each. The seed splices the pinned image digest in
-# at ghcr.io/mitstack-eu/mitstack-node-agent@sha256:2cba3ed4290db41b5f4ac6fe601b1a30c1c490f5c2847643b8a57eaba3d5a0bc, and a new digest reaches the cluster by one commit.
+# at ghcr.io/mitstack-eu/mitstack-node-agent@sha256:364c33c09aacb1cbce69745a6e7dc9dbb7449f4c21f3ccb3e14616ce3a61a3f6, and a new digest reaches the cluster by one commit.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -262,7 +262,7 @@ spec:
         fsGroup: 10001
       containers:
       - name: report
-        image: ghcr.io/mitstack-eu/mitstack-node-agent@sha256:2cba3ed4290db41b5f4ac6fe601b1a30c1c490f5c2847643b8a57eaba3d5a0bc
+        image: ghcr.io/mitstack-eu/mitstack-node-agent@sha256:364c33c09aacb1cbce69745a6e7dc9dbb7449f4c21f3ccb3e14616ce3a61a3f6
         command: [/bin/sh, -c, "sleep 120; while :; do mitstack-report; sleep 300; done"]
         env:
         - name: HOME
@@ -287,7 +287,7 @@ spec:
         - {name: api-token, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true}
         - {name: tmp, mountPath: /tmp}
       - name: host
-        image: ghcr.io/mitstack-eu/mitstack-node-agent@sha256:2cba3ed4290db41b5f4ac6fe601b1a30c1c490f5c2847643b8a57eaba3d5a0bc
+        image: ghcr.io/mitstack-eu/mitstack-node-agent@sha256:364c33c09aacb1cbce69745a6e7dc9dbb7449f4c21f3ccb3e14616ce3a61a3f6
         command: [/bin/sh, -c, "while :; do mitstack-host; sleep 300; done"]
         securityContext:
           privileged: true
@@ -338,7 +338,7 @@ spec:
             fsGroup: 10001
           containers:
           - name: refresh
-            image: ghcr.io/mitstack-eu/mitstack-node-agent@sha256:2cba3ed4290db41b5f4ac6fe601b1a30c1c490f5c2847643b8a57eaba3d5a0bc
+            image: ghcr.io/mitstack-eu/mitstack-node-agent@sha256:364c33c09aacb1cbce69745a6e7dc9dbb7449f4c21f3ccb3e14616ce3a61a3f6
             command: [mitstack-repo-token]
             env:
             - name: HOME
