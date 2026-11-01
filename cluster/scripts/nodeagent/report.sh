@@ -637,7 +637,10 @@ unsigned=
 timeout 15 bash -c "${REPORT_PROOF_SCRIPT:-}" token-request.sh "$work_dir/body" "$report_url" mitstack-node mitstack-node-report \
   > "$work_dir/proof" 2> "$work_dir/proof.err" || unsigned="the proof script exited $?"
 [ -n "$unsigned" ] || [ -s "$work_dir/proof" ] || unsigned="the proof script printed no proof"
-[ -n "$unsigned" ] || printf 'Mitstack-Report-Proof: %s\n' "$(cat "$work_dir/proof")" >> "$work_dir/headers"
+proof=$(cat "$work_dir/proof")
+# Anything beyond one token's characters, a second line above all, would reach curl as a header of its own.
+case $proof in *[![:alnum:]._-]*) [ -n "$unsigned" ] || unsigned="the proof script printed more than one token" ;; esac
+[ -n "$unsigned" ] || printf 'Mitstack-Report-Proof: %s\n' "$proof" >> "$work_dir/headers"
 
 status=$(curl -sS --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 20 \
   -X POST -H @"$work_dir/headers" -H 'Content-Type: application/json' \
