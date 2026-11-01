@@ -38,15 +38,15 @@ Its `Dockerfile` copies `host.sh`, `report.sh`, `repo-token.sh` and
 `openbao.py` into `/opt/mitstack/` as the commands `mitstack-host`,
 `mitstack-report`, `mitstack-repo-token` and `mitstack-openbao`. Beside them
 it copies `collect.sh`, `mitstack-patch-check.sh`, `mitstack-scan.py` and
-`refusal-reason.sh`. The image also carries `curl`, `gpg`, `openssl`,
-`python3` and kubectl v1.36.3. The tests run each script from a directory
+`refusal-reason.sh`. The image also carries `bash`, `curl`, `gpg`, `openssl`,
+`python3` and kubectl v1.36.3, and `bash` runs the report's proof script. The tests run each script from a directory
 laid out the same way.
 
 | File in `scripts/nodeagent/` | What it does | Test file |
 |---|---|---|
 | `host.sh` | Runs as `mitstack-host` in the privileged container and runs `collect.sh` in the host's namespaces through `nsenter`, leaving `host.tar` | `reportscript_test.go` |
 | `collect.sh` | Collects the host evidence and the admin-configuration reads, dry-runs the admission fixtures, and starts the patch check, a dedicated server's probe and the scan | `reportscript_test.go`, `reportscans_test.go` |
-| `report.sh` | Runs as `mitstack-report`, adds its service account's reads and the Argo CD probes to the evidence in `host.tar`, and posts the report | `reportscript_test.go`, `reportcompare_test.go` |
+| `report.sh` | Runs as `mitstack-report`, adds its service account's reads and the Argo CD probes to the evidence in `host.tar`, and posts the report signed with what the proof script in `REPORT_PROOF_SCRIPT` prints for the exact body. When that script fails, prints nothing or prints more than one token, it posts the report unsigned and exits non-zero | `reportscript_test.go`, `reportproof_test.go`, `reportcompare_test.go` |
 | `repo-token.sh` | Runs as `mitstack-repo-token` and patches the password of each repository Secret | `repotokenscript_test.go` |
 | `openbao.py` | Runs as `mitstack-openbao` on mitstack's own cluster, where its `init` initialises OpenBao, its `write-app-key` keeps the GitHub App's key in OpenBao, and its `write-app-secrets` writes each app's sealed values to its namespace's path | `openbaoscript_test.go` |
 | `node-agent.yaml` | The objects the seed writes as `cluster/node-agent.yaml` in the cluster repository | `nodeagent_test.go` |
@@ -61,13 +61,14 @@ it signed.
 
 ### How placeholders are filled
 
-Two files hold a placeholder in `@NAME@` form, which the Go code fills
+Two files hold placeholders in `@NAME@` form, which the Go code fills
 before the file reaches a node:
 
 | File | Placeholder | What fills it, and with what |
 |---|---|---|
 | `mitstack-enrol.sh` | `@REFUSAL_REASON@` | `scripts.go`, with the shared `refusal_reason` function |
 | `nodeagent/node-agent.yaml` | `@NODE_AGENT_IMAGE@` | `clusterseed.go`, with the image at the digest `scripts/nodeagent/digest` pins |
+| `nodeagent/node-agent.yaml` | `@REPORT_PROOF_SCRIPT@` | `clusterseed.go`, with block-kit's `reportproof.TokenRequestScript` as a quoted string, which the report container runs with `bash -c` |
 
 `refusal-reason.sh` starts with a shebang only so that it lints on its own,
 and the splice leaves that line out. The image's repository-token script
@@ -91,6 +92,7 @@ in `harness_test.go`.
 | `nodescript_test.go` | The rendered node script, with `sh` | A fake metadata service |
 | `enrolscript_test.go` | The rendered enrol script | A local HTTPS server that plays the enrolment endpoint. Three cases wait out the script's retries, about 30 seconds each, and they run in parallel |
 | `reportscript_test.go` | The image's `mitstack-host` and `mitstack-report` | A local HTTPS server playing the report endpoint. A fake `nsenter` runs the collection in the test's own namespaces, and a fake `journalctl`, a fake `k3s` that also answers as `kubectl`, and fake `ss`, `systemctl` and `nft` answer it |
+| `reportproof_test.go` | The image's `mitstack-report`, signing with a stub proof script, and once with block-kit's token request script | The report suite's fakes, with the fake `k3s` minting the token `kubectl create token` asks for |
 | `reportcompare_test.go` | The same scripts over the same fakes | Checks that the report carries every field path of the host report kept in `testdata/host-report-3.0.0.sh` |
 | `repotokenscript_test.go` | The image's `mitstack-repo-token` | A local HTTPS server playing the refresh endpoint, with `kubectl` answered by the fake `k3s` |
 | `nodeagent_test.go` | The seeded node agent's objects, and the probe Job's command | The rights the platform's ADR 0087 grants the node agent, and a fake `curl`, so one case waits out the pod's 10 seconds |
@@ -124,7 +126,7 @@ directory.
 | `kyverno-test` | Each admission policy gives its accepted and refused fixtures the expected result |
 | `localpv-lvm` | A dedicated seed's LocalPV-LVM binds a claim on a real k3s node |
 | `openbao-boot` | The recorded user data of a cluster that hosts the platform initialises OpenBao and writes the GitHub App's key into it |
-| `node-agent-reads` | The node agent's report container reads the cluster through its service account |
+| `node-agent-reads` | The node agent's report container reads the cluster through its service account, and its proof script gets a token the API server signed |
 | `release` | On a push to `main`, once every job above passes, tags the commit with the version `.github/version` names |
 
 ### How the admission policies are tested
@@ -215,6 +217,13 @@ and External Secrets, and the fake GitHub's log. A run that passes prints an
 ### How CI proves the node agent's reads on k3s
 
 The `node-agent-reads` job runs `scripts/ci/node-agent-proof.sh` as root. It
-boots k3s with `node-agent.yaml` and an image built from the commit, and
-checks that the report container's `kubectl get --request-timeout=10s` reads
-return the node and the pods in `argocd` through its service account.
+boots k3s with the recorded seed's `node-agent.yaml`, in
+`testdata/golden/seed/`, and an image built from the commit. It checks that
+the report container's `kubectl get --request-timeout=10s` reads return the
+node and the pods in `argocd` through its service account.
+
+It then runs the report container's proof script on a sample body, the way
+`report.sh` does. The proof passes when the token's audiences are
+`https://api.mitstack.dev` and the body's `report-sha256:` digest, and a
+TokenReview for `https://api.mitstack.dev` reads it as authenticated, which
+shows the API server signed it.

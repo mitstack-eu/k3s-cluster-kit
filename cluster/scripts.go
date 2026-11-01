@@ -21,6 +21,7 @@ const (
 	// A script names a value spliced in at @NAME@; @REFUSAL_REASON@ spans its line so the blank lines around it survive, and fragmentShebang lets refusal-reason.sh lint alone and is dropped where it is spliced in.
 	refusalReasonPlaceholder  = "@REFUSAL_REASON@\n"
 	nodeAgentImagePlaceholder = "@NODE_AGENT_IMAGE@"
+	reportProofPlaceholder    = "@REPORT_PROOF_SCRIPT@"
 	fragmentShebang           = "#!/bin/sh\n"
 )
 

@@ -207,6 +207,33 @@ subjects:
   name: mitstack-node-report
   namespace: mitstack-node
 ---
+# The report signs each body with a token the API server mints for its own
+# service account, and may mint one for no other.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mitstack-node-report-sign
+  namespace: mitstack-node
+rules:
+- apiGroups: [""]
+  resources: [serviceaccounts/token]
+  resourceNames: [mitstack-node-report]
+  verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mitstack-node-report-sign
+  namespace: mitstack-node
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mitstack-node-report-sign
+subjects:
+- kind: ServiceAccount
+  name: mitstack-node-report
+  namespace: mitstack-node
+---
 # Only the report container gets an API token, so the privileged host
 # container holds none of its own.
 apiVersion: apps/v1
@@ -242,6 +269,8 @@ spec:
           value: /tmp
         - name: KUBECONFIG
           value: /opt/mitstack/in-cluster.kubeconfig
+        - name: REPORT_PROOF_SCRIPT
+          value: @REPORT_PROOF_SCRIPT@
         securityContext:
           runAsNonRoot: true
           runAsUser: 10001

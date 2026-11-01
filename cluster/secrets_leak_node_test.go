@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mitstack-eu/block-kit/verify/kittest"
 	"github.com/mitstack-eu/k3s-cluster-kit/testutil"
-	"github.com/mitstack-eu/operator-kit/v2/kittest"
 )
 
 var nodeSecrets = []string{
@@ -81,7 +81,7 @@ func TestNoSecretLeak_NodeTokensThroughEnrolmentRefusalRefreshAndReport(t *testi
 	rec = newArgvRecorder(t)
 	argocd := newFakeArgoCDCurl(t, cannedArgoCDAnswers())
 	run = runReportScript(t, enrolmentDir, testutil.FixtureReportToken, report.URL+testutil.ReportEndpointPath, report.CAFile,
-		newFakeJournal(t, cannedJournal).path, withPATH(argocd.dir+string(os.PathListSeparator)+rec.path()))
+		newFakeJournal(t, cannedJournal).path, withPATH(argocd.dir+string(os.PathListSeparator)+rec.path()), withEnv(reportProofScriptEnv, newProofStub(t, stubProof).script))
 
 	testutil.FatalIf(t, run.Err != nil, "the report script on a 200 error = %v; want nil\n%s", run.Err, run.Output())
 	reqs := report.Received()

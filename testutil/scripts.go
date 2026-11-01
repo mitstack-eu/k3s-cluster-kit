@@ -111,6 +111,7 @@ func TestRepoFile(t *testing.T, path string) string {
 
 type RecordedEnrolRequest struct {
 	Method, Path, Authorization, ContentType string
+	ReportProof                              string
 	Body                                     []byte
 	TokenOnCmdline                           []string // every process command line that carried the token, the token itself redacted
 	SawClient                                bool     // whether any process command line carried this server's URL, which shows the scan could see the client at all
@@ -158,7 +159,7 @@ func (f *FakeEnrolment) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	n := len(f.requests)
 	f.requests = append(f.requests, RecordedEnrolRequest{Method: r.Method, Path: r.URL.Path, Authorization: r.Header.Get("Authorization"),
-		ContentType: r.Header.Get("Content-Type"), Body: raw, TokenOnCmdline: withToken, SawClient: sawClient})
+		ContentType: r.Header.Get("Content-Type"), ReportProof: r.Header.Get("Mitstack-Report-Proof"), Body: raw, TokenOnCmdline: withToken, SawClient: sawClient})
 	status := f.statuses[min(n, len(f.statuses)-1)]
 	body, custom := f.bodies[status]
 	okBody := f.okBody

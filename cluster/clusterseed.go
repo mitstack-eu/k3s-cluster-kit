@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/mitstack-eu/block-kit/helpers/reportproof"
 )
 
 const (
@@ -75,7 +77,9 @@ var upgradeControllerDigests = map[string]string{
 // nodeAgentImage names the image main's CI signed by digest, so a moved tag cannot change what the cluster runs.
 var nodeAgentImage = "ghcr.io/mitstack-eu/mitstack-node-agent@" + strings.TrimSpace(script("nodeagent/digest"))
 
-var nodeAgentManifest = strings.ReplaceAll(script("nodeagent/node-agent.yaml"), nodeAgentImagePlaceholder, nodeAgentImage)
+// nodeAgentManifest carries block-kit's proof script as a Go-quoted string, whose escapes YAML reads in a double-quoted scalar.
+var nodeAgentManifest = strings.NewReplacer(nodeAgentImagePlaceholder, nodeAgentImage,
+	reportProofPlaceholder, strconv.Quote(reportproof.TokenRequestScript)).Replace(script("nodeagent/node-agent.yaml"))
 
 // RenderSeed renders the seed files keyed by their repository path, the same bytes for the same versions, public IPv4 and repository URL.
 func RenderSeed(v Versions, publicIPv4, repoURL string) (map[string]string, error) {
