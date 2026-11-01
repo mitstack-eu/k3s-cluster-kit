@@ -45,6 +45,10 @@ if argv[:1] == ["secrets-encrypt"]:
 if not argv or argv[0] != "kubectl":
     fail("k3s: no such command " + (argv[0] if argv else ""), 2)
 
+if argv[1:3] == ["create", "token"]:
+    minted = cfg["tokenRequest"]
+    emit(minted if minted["stdout"] or minted["exit"] else {"stderr": "error: this fake k3s mints no token unless a test sets one\n", "exit": 1})
+
 VALUE_FLAGS = {
     "-n": "ns", "--namespace": "ns", "-l": "selector", "--selector": "selector",
     "-o": "output", "--output": "output", "-L": "columns", "--label-columns": "columns",

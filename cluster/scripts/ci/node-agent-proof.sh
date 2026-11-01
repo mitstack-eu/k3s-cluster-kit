@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Boots k3s with the seeded node agent built from this commit, and proves the
 # report container's kubectl reads the cluster with its service account,
-# through the same flags the report passes, and that the refresh's merge
-# patch of a repository Secret passes the refresh's patch-only role.
+# through the same flags the report passes, that its proof script gets a token
+# the API server signed for the platform and the body, and that the refresh's
+# merge patch of a repository Secret passes the refresh's patch-only role.
 # Usage: sudo scripts/ci/node-agent-proof.sh, from the cluster directory, on a
 #   disposable VM, since it installs k3s.
 # It exists because kubectl falls back to localhost:8080 when an override flag
@@ -10,7 +11,7 @@
 # object first, which only a real API server and kubelet show.
 set -euo pipefail
 
-manifest=scripts/nodeagent/node-agent.yaml
+manifest=testdata/golden/seed/node-agent.yaml
 k3s_version=v1.36.3+k3s1
 k3s_sha256=2f98a9f8fe5782479ee2d54e70a1b10a7f6fd4cae8d38ed3098452dc6eed76b5
 image=mitstack-node-agent:proof
@@ -65,15 +66,20 @@ echo "::endgroup::"
 
 # k3s runs flannel here rather than Cilium, so the egress policy has no CRD to
 # land on, and the agent's namespaces outside mitstack-node do not exist yet.
-echo "::group::the seeded node agent, its image swapped for this commit's"
+echo "::group::the recorded seed's node agent, its image swapped for this commit's"
 kubectl create namespace argocd
 kubectl create namespace system-upgrade
 python3 -I - "$manifest" "$image" >"$seeded" <<'PY'
 import sys, yaml
 
 manifest, image = sys.argv[1], sys.argv[2]
-docs = yaml.safe_load_all(open(manifest).read().replace("@NODE_AGENT_IMAGE@", image))
-print(yaml.safe_dump_all([d for d in docs if d and d["kind"] != "CiliumNetworkPolicy"]))
+docs = [d for d in yaml.safe_load_all(open(manifest)) if d and d["kind"] != "CiliumNetworkPolicy"]
+for d in docs:
+    pod = d["spec"]["jobTemplate"]["spec"]["template"]["spec"] if d["kind"] == "CronJob" else d.get("spec", {}).get("template", {}).get("spec", {})
+    for c in pod.get("containers", []):
+        if c["image"].startswith("ghcr.io/mitstack-eu/mitstack-node-agent@"):
+            c["image"] = image
+print(yaml.safe_dump_all(docs))
 PY
 kubectl apply -f "$seeded"
 kubectl -n mitstack-node create secret generic mitstack-report-token --from-literal=token=proof
@@ -93,6 +99,36 @@ got=$(kubectl -n mitstack-node exec deployment/mitstack-node-agent -c report -- 
   fail "the report container's kubectl get pods -n argocd failed: ${got}"
 [ "$got" = "pod/argocd-proof" ] || fail "the report container listed ${got} in argocd, want pod/argocd-proof"
 echo "node-agent-proof: PASS: the report container listed the pods in argocd"
+echo "::endgroup::"
+
+# A TokenReview shows the API server accepts the token it minted for the
+# platform's audience, and the claims name the body's digest.
+echo "::group::the report container's proof of a body"
+body='{"proof":"node-agent-proof"}'
+proof=$(kubectl -n mitstack-node exec -i deployment/mitstack-node-agent -c report -- sh -s "$body" 2>&1 <<'SH'
+printf %s "$1" > /tmp/body
+exec bash -c "$REPORT_PROOF_SCRIPT" token-request.sh /tmp/body https://api.mitstack.dev/v1/cluster-reports mitstack-node mitstack-node-report
+SH
+) || fail "the report container's proof script failed: ${proof}"
+digest=$(printf %s "$body" | sha256sum | cut -d' ' -f1)
+python3 -I - "$proof" "$digest" <<'PY' || fail "the proof's claims are not the platform's audience and the body's digest"
+import base64, json, sys
+
+proof, digest = sys.argv[1], sys.argv[2]
+payload = proof.split(".")[1]
+claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+want = ["https://api.mitstack.dev", "report-sha256:" + digest]
+sys.exit(0 if claims["aud"] == want else "aud is %s, want %s" % (claims["aud"], want))
+PY
+got=$(python3 -I - "$proof" <<'PY' | kubectl create -o jsonpath='{.status.authenticated}' -f -
+import json, sys
+
+print(json.dumps({"apiVersion": "authentication.k8s.io/v1", "kind": "TokenReview",
+                  "spec": {"token": sys.argv[1], "audiences": ["https://api.mitstack.dev"]}}))
+PY
+) || fail "the TokenReview of the proof failed"
+[ "$got" = true ] || fail "the API server reviewed the proof as authenticated=${got}, want true"
+echo "node-agent-proof: PASS: the report container's proof is a token the API server signed for the platform and the body"
 echo "::endgroup::"
 
 # A self access review is open to every authenticated identity, so it shows

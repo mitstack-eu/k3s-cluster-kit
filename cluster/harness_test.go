@@ -520,6 +520,7 @@ type fakeK3sConfig struct {
 	Generate       map[string]generateSpec  `json:"generate"`
 	Applies        map[string]kubectlAnswer `json:"applies"`
 	SecretB64      string                   `json:"secretB64"`
+	TokenRequest   kubectlAnswer            `json:"tokenRequest"`
 	secret         string
 }
 
@@ -641,6 +642,11 @@ func k3sDelayingFirstCall(d time.Duration) fakeK3sOption {
 }
 
 func k3sServingSecret(value string) fakeK3sOption { return func(c *fakeK3sConfig) { c.secret = value } }
+
+// k3sMintingToken sets what kubectl create token prints, as the TokenRequest API mints one.
+func k3sMintingToken(token string) fakeK3sOption {
+	return func(c *fakeK3sConfig) { c.TokenRequest = kubectlAnswer{Stdout: token + "\n"} }
+}
 
 type fakeK3s struct{ path, argsFile string }
 
@@ -800,6 +806,7 @@ type reportRig struct {
 	rec      *argvRecorder
 	argocd   map[string]argocdAnswer
 	curl     fakeCurl
+	proof    proofStub
 	env      []testutil.ScriptRunOption
 	run      testutil.EnrolRun
 	req      testutil.RecordedEnrolRequest
@@ -846,6 +853,9 @@ func withFailingK3s(stderr string) reportOption {
 }
 func withPrintingK3s(stdout string) reportOption {
 	return func(r *reportRig) { r.k3sPath = testutil.NewFakeTool(r.t, "k3s", stdout, "", 0).Path }
+}
+func withProofScript(script string) reportOption {
+	return func(r *reportRig) { r.env = append(r.env, withEnv(reportProofScriptEnv, script)) }
 }
 func withEnvVar(key, value string) reportOption {
 	return func(r *reportRig) { r.env = append(r.env, withEnv(key, value)) }
@@ -943,7 +953,10 @@ func (r *reportRig) exec() testutil.EnrolRun {
 	if r.url != "" {
 		url, ca = r.url, ""
 	}
-	opts := append([]testutil.ScriptRunOption{withEnv(testutil.ReportK3sEnv, k3sPath)}, r.env...)
+	if r.proof.dir == "" {
+		r.proof = newProofStub(t, stubProof)
+	}
+	opts := append([]testutil.ScriptRunOption{withEnv(testutil.ReportK3sEnv, k3sPath), withEnv(reportProofScriptEnv, r.proof.script)}, r.env...)
 	if r.rec != nil {
 		opts = append(opts, withPATH(r.rec.path()))
 	}
@@ -973,6 +986,34 @@ func (r *reportRig) send() *reportRig {
 }
 
 func (r *reportRig) fields() map[string]json.RawMessage { return reportFields(r.t, r.req) }
+
+const (
+	reportProofScriptEnv = "REPORT_PROOF_SCRIPT"
+	stubProof            = "printf 'report-proof-fixture\\n'"
+)
+
+// proofStub stands in for block-kit's token request script, keeping the body file and arguments it was run with.
+type proofStub struct{ dir, script string }
+
+func newProofStub(t *testing.T, answer string) proofStub {
+	t.Helper()
+	dir := t.TempDir()
+	q := testutil.ShellQuote(dir)
+	return proofStub{dir: dir, script: "cp \"$1\" " + q + "/body && printf '%s\\n' \"$0\" \"$@\" > " + q + "/args && " + answer + "\n"}
+}
+
+func withProofAnswer(answer string) reportOption {
+	return func(r *reportRig) { r.proof = newProofStub(r.t, answer) }
+}
+
+func (p proofStub) ran(t *testing.T) (args []string, body []byte) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(p.dir, "args"))
+	testutil.FatalIf(t, err != nil, "the proof script never ran: %v", err)
+	body, err = os.ReadFile(filepath.Join(p.dir, "body"))
+	testutil.FatalIf(t, err != nil, "the proof script kept no body: %v", err)
+	return strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n"), body
+}
 
 const (
 	patchCheckAptGetEnv      = "MITSTACK_APT_GET"

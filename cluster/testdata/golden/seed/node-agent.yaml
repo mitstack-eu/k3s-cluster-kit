@@ -207,6 +207,33 @@ subjects:
   name: mitstack-node-report
   namespace: mitstack-node
 ---
+# The report signs each body with a token the API server mints for its own
+# service account, and may mint one for no other.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mitstack-node-report-sign
+  namespace: mitstack-node
+rules:
+- apiGroups: [""]
+  resources: [serviceaccounts/token]
+  resourceNames: [mitstack-node-report]
+  verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mitstack-node-report-sign
+  namespace: mitstack-node
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: mitstack-node-report-sign
+subjects:
+- kind: ServiceAccount
+  name: mitstack-node-report
+  namespace: mitstack-node
+---
 # Only the report container gets an API token, so the privileged host
 # container holds none of its own.
 apiVersion: apps/v1
@@ -242,6 +269,8 @@ spec:
           value: /tmp
         - name: KUBECONFIG
           value: /opt/mitstack/in-cluster.kubeconfig
+        - name: REPORT_PROOF_SCRIPT
+          value: "#!/usr/bin/env bash\n# Prints the Mitstack-Report-Proof of a node report: a token the Kubernetes API server signs for SERVICE_ACCOUNT, naming\n# the platform's origin and the SHA-256 of the exact body, so the node itself holds no private key.\n# Usage: token-request.sh BODY_FILE REPORT_URL NAMESPACE SERVICE_ACCOUNT\n# It exists so every Kubernetes cluster block signs its reports one way; SERVICE_ACCOUNT needs create on its own\n# serviceaccounts/token and nothing more.\nset -euo pipefail\n\nbody=$1 url=$2 namespace=$3 account=$4\n[[ $url == https://* ]] || { echo \"token-request: $url is not https\" >&2; exit 2; }\norigin=${url#https://}\ndigest=$(sha256sum \"$body\" | cut -d' ' -f1)\nexec kubectl create token \"$account\" -n \"$namespace\" --audience \"https://${origin%%/*}\" --audience \"report-sha256:$digest\" --duration 10m\n"
         securityContext:
           runAsNonRoot: true
           runAsUser: 10001

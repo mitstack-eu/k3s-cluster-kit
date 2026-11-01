@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mitstack-eu/block-kit/helpers/reportproof"
 	"github.com/mitstack-eu/k3s-cluster-kit/testutil"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/component-helpers/auth/rbac/validation"
@@ -90,6 +91,10 @@ func covers(t *testing.T, docs []map[string]any, sa, namespace string, rule rbac
 	return ok
 }
 
+func tokenRule(account string) rbacv1.PolicyRule {
+	return rbacv1.PolicyRule{Verbs: []string{"create"}, APIGroups: []string{""}, Resources: []string{"serviceaccounts/token"}, ResourceNames: []string{account}}
+}
+
 func secretsRule(verb string, names ...string) rbacv1.PolicyRule {
 	return rbacv1.PolicyRule{Verbs: []string{verb}, APIGroups: []string{""}, Resources: []string{"secrets"}, ResourceNames: names}
 }
@@ -126,6 +131,9 @@ func TestNodeAgentSeed_GrantsTheReadsTheReportMakesAndOnlyTheRefreshsNamedPatch(
 		{"mitstack-node-report", "mitstack-metadata-probe", rule("get", "", "pods/log"), true},
 		{"mitstack-node-report", "kube-system", rule("get", "", "pods/log"), false},
 		{"mitstack-node-report", "argocd", rule("create", "", "pods/exec"), false},
+		{"mitstack-node-report", "mitstack-node", tokenRule("mitstack-node-report"), true},
+		{"mitstack-node-report", "mitstack-node", tokenRule("mitstack-repo-token"), false},
+		{"mitstack-repo-token", "mitstack-node", tokenRule("mitstack-node-report"), false},
 		{"mitstack-repo-token", "argocd", secretsRule("patch", "cluster-repository"), true},
 		{"mitstack-repo-token", "argocd", secretsRule("patch", "argocd-secret"), false},
 		{"mitstack-repo-token", "argocd", secretsRule("create"), false},
@@ -285,4 +293,30 @@ func hasPair(argv []string, value string, flags ...string) bool {
 		}
 	}
 	return false
+}
+
+func TestNodeAgentSeed_TheReportContainerCarriesBlockKitsProofScriptAndTheImageTheBashItRunsIn(t *testing.T) {
+	var report map[string]any
+	for _, doc := range nodeAgentDocs(t) {
+		if doc["kind"] != "Deployment" {
+			continue
+		}
+		for _, c := range testutil.Dig(doc, "spec", "template", "spec", "containers").([]any) {
+			if c.(map[string]any)["name"] == "report" {
+				report = c.(map[string]any)
+			}
+		}
+	}
+	testutil.FatalIf(t, report == nil, "the seed's node-agent Deployment has no report container")
+	var script any
+	for _, e := range report["env"].([]any) {
+		if e.(map[string]any)["name"] == "REPORT_PROOF_SCRIPT" {
+			script = e.(map[string]any)["value"]
+		}
+	}
+	testutil.FailIf(t, script != reportproof.TokenRequestScript, "the report container's REPORT_PROOF_SCRIPT is %q, want block-kit's reportproof.TokenRequestScript", script)
+
+	dockerfile := testutil.TestRepoFile(t, "scripts/nodeagent/Dockerfile")
+	apk := regexp.MustCompile(`(?m)^RUN apk add --no-cache (.*)$`).FindStringSubmatch(dockerfile)
+	testutil.FailIf(t, apk == nil || !slices.Contains(strings.Fields(apk[1]), "bash"), "the node-agent image installs %q, want bash among them, which block-kit's proof script runs in", apk)
 }
