@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/ProtonMail/go-crypto v1.5.2
-	github.com/mitstack-eu/operator-kit/v2 v2.4.0
+	github.com/mitstack-eu/block-kit v0.16.3
 	go.yaml.in/yaml/v3 v3.0.5
 	k8s.io/api v0.34.3
 	k8s.io/component-helpers v0.34.3

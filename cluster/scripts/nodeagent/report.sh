@@ -2,9 +2,11 @@
 # Reports the node's journal, the cluster's, the hardening and the patching
 # evidence to the mitstack platform, one attempt per run: the cluster reads
 # this pod's service account allows, the Argo CD probes, and the host evidence
-# mitstack-host left in host.tar.
-# Usage: mitstack-report, run every five minutes by the report container of
-# mitstack-node-agent.
+# mitstack-host left in host.tar. It signs the exact body with block-kit's
+# proof script in REPORT_PROOF_SCRIPT, and a report it cannot sign goes
+# unsigned before it exits non-zero.
+# Usage: REPORT_PROOF_SCRIPT=<script> mitstack-report, run every five minutes
+# by the report container of mitstack-node-agent.
 # It exists because the node accepts no SSH, so what it reports is all the
 # platform can see of it.
 set -eu
@@ -630,11 +632,18 @@ write_private(work + "/headers", "Authorization: Bearer " + token + "\n")
 write_private(work + "/body", json.dumps(body))
 PY
 
+# The API server mints the proof for this service account, so the node holds no signing key.
+unsigned=
+timeout 15 bash -c "${REPORT_PROOF_SCRIPT:-}" token-request.sh "$work_dir/body" "$report_url" mitstack-node mitstack-node-report \
+  > "$work_dir/proof" 2> "$work_dir/proof.err" || unsigned="the proof script exited $?"
+[ -n "$unsigned" ] || [ -s "$work_dir/proof" ] || unsigned="the proof script printed no proof"
+[ -n "$unsigned" ] || printf 'Mitstack-Report-Proof: %s\n' "$(cat "$work_dir/proof")" >> "$work_dir/headers"
+
 status=$(curl -sS --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 20 \
   -X POST -H @"$work_dir/headers" -H 'Content-Type: application/json' \
   --data-binary @"$work_dir/body" -o /dev/null -w '%{http_code}' \
   "$report_url") || status=000
 case $status in
-  2[0-9][0-9]) exit 0 ;;
+  2[0-9][0-9]) [ -z "$unsigned" ] || fail "the platform took the report unsigned, since $unsigned: $(head -c 1024 "$work_dir/proof.err")" ;;
   *) fail "the platform did not take the report: HTTP $status" ;;
 esac
