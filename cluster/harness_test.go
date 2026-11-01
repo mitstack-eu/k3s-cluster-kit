@@ -643,7 +643,6 @@ func k3sDelayingFirstCall(d time.Duration) fakeK3sOption {
 
 func k3sServingSecret(value string) fakeK3sOption { return func(c *fakeK3sConfig) { c.secret = value } }
 
-// k3sMintingToken sets what kubectl create token prints, as the TokenRequest API mints one.
 func k3sMintingToken(token string) fakeK3sOption {
 	return func(c *fakeK3sConfig) { c.TokenRequest = kubectlAnswer{Stdout: token + "\n"} }
 }
@@ -817,7 +816,7 @@ type reportOption func(*reportRig)
 func newReportRig(t *testing.T, opts ...reportOption) *reportRig {
 	t.Helper()
 	r := &reportRig{t: t, token: testutil.FixtureReportToken, srv: testutil.NewFakeEnrolment(t, testutil.FixtureReportToken, http.StatusOK),
-		answer: enrolledAnswer(t), journal: cannedJournal, tools: map[string]testutil.FakeTool{}, dirFiles: map[string]string{}}
+		answer: enrolledAnswer(t), journal: cannedJournal, tools: map[string]testutil.FakeTool{}, dirFiles: map[string]string{}, proof: newProofStub(t, stubProof)}
 	for _, o := range opts {
 		o(r)
 	}
@@ -853,9 +852,6 @@ func withFailingK3s(stderr string) reportOption {
 }
 func withPrintingK3s(stdout string) reportOption {
 	return func(r *reportRig) { r.k3sPath = testutil.NewFakeTool(r.t, "k3s", stdout, "", 0).Path }
-}
-func withProofScript(script string) reportOption {
-	return func(r *reportRig) { r.env = append(r.env, withEnv(reportProofScriptEnv, script)) }
 }
 func withEnvVar(key, value string) reportOption {
 	return func(r *reportRig) { r.env = append(r.env, withEnv(key, value)) }
@@ -952,9 +948,6 @@ func (r *reportRig) exec() testutil.EnrolRun {
 	url, ca := r.srv.URL+testutil.ReportEndpointPath, r.srv.CAFile
 	if r.url != "" {
 		url, ca = r.url, ""
-	}
-	if r.proof.dir == "" {
-		r.proof = newProofStub(t, stubProof)
 	}
 	opts := append([]testutil.ScriptRunOption{withEnv(testutil.ReportK3sEnv, k3sPath), withEnv(reportProofScriptEnv, r.proof.script)}, r.env...)
 	if r.rec != nil {
