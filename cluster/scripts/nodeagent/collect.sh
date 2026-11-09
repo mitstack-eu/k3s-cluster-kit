@@ -102,11 +102,12 @@ fi
 # start_scan copies the image's scan tools onto the host once for each scan
 # script, which pins them, since the detached scan outlives this view of the
 # image. The scan runs detached, since it takes minutes, and systemd refuses a
-# second mitstack-scan unit while one runs.
+# second mitstack-scan unit while one runs, whose copy is left as it reads it.
 start_scan() {
   copy=$state_dir/scan-tools/image
   key=$(printf '%s\n' "$scan" | sha256sum)
-  if [ "$(cat "$copy/.scan-sha256" 2> /dev/null)" != "$key" ]; then
+  if [ "$(cat "$copy/.scan-sha256" 2> /dev/null)" != "$key" ] &&
+    ! "$systemctl" is-active --quiet mitstack-scan.service > /dev/null 2>&1; then
     rm -rf "$copy" "$copy.partial" &&
       mkdir -p "$state_dir/scan-tools" &&
       cp -R "$image_tools" "$copy.partial" &&

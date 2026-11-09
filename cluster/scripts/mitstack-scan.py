@@ -226,6 +226,10 @@ if sys.argv[1:] == ["check"]:
 # nothing.
 os.umask(0o077)
 os.makedirs(tools, exist_ok=True)
+# A digest-named set is no tool the scan runs, so it only fills the disk.
+for n in os.listdir(tools):
+    if re.fullmatch(r"[0-9a-f]{64}(\.partial)?", n):
+        shutil.rmtree(tools + "/" + n, True)
 try:
     kubernetes = run([k3s, "kubectl", "get", "nodes", "-o", "jsonpath={.items[0].status.nodeInfo.kubeletVersion}",
                       "--request-timeout=10s"], 60).decode().strip()

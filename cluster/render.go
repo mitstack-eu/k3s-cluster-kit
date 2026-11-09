@@ -75,7 +75,7 @@ const (
 var (
 	k3sVersionRe    = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?\+k3s[0-9]+$`)
 	SHA256HexRe     = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	imageByDigestRe = regexp.MustCompile(`^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}$`)
+	imageByDigestRe = regexp.MustCompile(`^([a-z0-9-]+(\.[a-z0-9-]+)+(:[0-9]+)?|[a-z0-9-]+:[0-9]+)/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}$`)
 	imagePathRe     = regexp.MustCompile(`^/[A-Za-z0-9._/-]+$`)
 	chartVersionRe  = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`)
 	releaseTagRe    = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$`)
@@ -143,7 +143,8 @@ type CloudInitConfig struct {
 	RunCmd     []string        `yaml:"runcmd"`
 }
 
-// RenderUserData renders the same bytes for the same inputs.
+// RenderUserData renders the same bytes for the same inputs, and leaves Hetzner's size limit to whoever sends
+// the document to Hetzner, through CheckUserDataSize.
 func RenderUserData(in UserDataInputs) (string, error) {
 	if err := in.validate(); err != nil {
 		return "", err
@@ -157,7 +158,7 @@ func RenderUserData(in UserDataInputs) (string, error) {
 		return "", err
 	}
 	if in.HostsPlatform == nil {
-		return UserDataDocument(CloudInitConfig{
+		return cloudConfigDocument(CloudInitConfig{
 			WriteFiles: slices.Concat(rootOnly, scripts, serviceFiles(k3sWaitsForEnrolment)),
 			RunCmd:     []string{bootCommand()},
 		})
@@ -166,7 +167,7 @@ func RenderUserData(in UserDataInputs) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return UserDataDocument(CloudInitConfig{
+	return cloudConfigDocument(CloudInitConfig{
 		WriteFiles: slices.Concat(rootOnly, platform, scripts, serviceFiles(nil)),
 		RunCmd:     []string{hostsPlatformBootCommand()},
 	})
@@ -262,15 +263,30 @@ var (
 
 // UserDataDocument marshals doc as a cloud-config document and refuses one over Hetzner's size limit.
 func UserDataDocument(doc CloudInitConfig) (string, error) {
+	userData, err := cloudConfigDocument(doc)
+	if err != nil {
+		return "", err
+	}
+	if err := CheckUserDataSize(userData); err != nil {
+		return "", err
+	}
+	return userData, nil
+}
+
+// CheckUserDataSize refuses a document Hetzner's API would not take as a server's user data.
+func CheckUserDataSize(userData string) error {
+	if len(userData) >= userDataLimit {
+		return fmt.Errorf("rendering user data: the document is %d bytes, over Hetzner's %d-byte limit", len(userData), userDataLimit)
+	}
+	return nil
+}
+
+func cloudConfigDocument(doc CloudInitConfig) (string, error) {
 	body, err := marshalYAML(doc)
 	if err != nil {
 		return "", fmt.Errorf("rendering user data: %w", err)
 	}
-	userData := "#cloud-config\n" + body
-	if len(userData) >= userDataLimit {
-		return "", fmt.Errorf("rendering user data: the document is %d bytes, over Hetzner's %d-byte limit", len(userData), userDataLimit)
-	}
-	return userData, nil
+	return "#cloud-config\n" + body, nil
 }
 
 // RootFile is a plain-text file owned by root.
