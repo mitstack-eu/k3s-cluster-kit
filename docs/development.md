@@ -29,7 +29,7 @@ edit to a file either one carries, such as the enrol script or
 | `mitstack-install-k3s.sh` | Installs k3s from bytes checked against the pinned digests, as a Go template the pins fill in | `installerscript_test.go` |
 | `mitstack-patch-check.sh` | Writes how far the OS and k3s are behind their patches to `patch-check.json`. The node agent's image carries it and runs it about hourly | `patchcheck_test.go` |
 | `cilium-values.yaml` | Holds the Cilium chart's values, which the node's `HelmChart` and the seeded Cilium Application both carry | `render_test.go` |
-| `mitstack-scan.py` | Runs kube-bench and kubescape once a day and keeps a summary of each. The node agent's image carries it and starts it on the host | `scanscript_test.go`, `reportscans_test.go` |
+| `mitstack-scan.py` | Runs kube-bench and kubescape once a day and keeps a summary of each. The node agent's image carries it and starts it on the host, where it runs the host's copy of the image's scan tools once each matches its pin | `scanscript_test.go`, `reportscans_test.go` |
 
 The node agent's own files sit in `scripts/nodeagent/`. The node agent is
 the image `ghcr.io/mitstack-eu/mitstack-node-agent`, which runs the node
@@ -39,13 +39,19 @@ Its `Dockerfile` copies `host.sh`, `report.sh`, `repo-token.sh` and
 `mitstack-report`, `mitstack-repo-token` and `mitstack-openbao`. Beside them
 it copies `collect.sh`, `mitstack-patch-check.sh`, `mitstack-scan.py` and
 `refusal-reason.sh`. The image also carries `bash`, `curl`, `gpg`, `openssl`,
-`python3` and kubectl v1.36.3, and `bash` runs the report's proof script. The tests run each script from a directory
-laid out the same way.
+`python3` and kubectl v1.36.3, and `bash` runs the report's proof script.
+The scan's kube-bench and kubescape sit in `/opt/mitstack/scan-tools/`,
+copied by digest from `public.ecr.aws/aquasecurity/kube-bench` and
+`quay.io/kubescape/kubescape-cli`. The build runs
+`python3 -I mitstack-scan.py check`, which fails naming any of them whose
+sha256 differs from the scan's pin. The tests run each script from a
+directory laid out the same way, with a fake file for each tool copied from
+another image.
 
 | File in `scripts/nodeagent/` | What it does | Test file |
 |---|---|---|
 | `host.sh` | Runs as `mitstack-host` in the privileged container and runs `collect.sh` in the host's namespaces through `nsenter`, leaving `host.tar` | `reportscript_test.go` |
-| `collect.sh` | Collects the host evidence and the admin-configuration reads, dry-runs the admission fixtures, and starts the patch check, a dedicated server's probe and the scan | `reportscript_test.go`, `reportscans_test.go` |
+| `collect.sh` | Collects the host evidence and the admin-configuration reads, dry-runs the admission fixtures, and starts the patch check, a dedicated server's probe and the scan. Before the scan starts, it copies the image's scan tools onto the host once for each scan script | `reportscript_test.go`, `reportscans_test.go` |
 | `report.sh` | Runs as `mitstack-report`, adds its service account's reads and the Argo CD probes to the evidence in `host.tar`, and posts the report signed with what the proof script in `REPORT_PROOF_SCRIPT` prints for the exact body. When that script fails, prints nothing or prints more than one token, it posts the report unsigned and exits non-zero | `reportscript_test.go`, `reportproof_test.go`, `reportcompare_test.go` |
 | `repo-token.sh` | Runs as `mitstack-repo-token` and patches the password of each repository Secret | `repotokenscript_test.go` |
 | `openbao.py` | Runs as `mitstack-openbao` on mitstack's own cluster, where its `init` initialises OpenBao, its `write-app-key` keeps the GitHub App's key in OpenBao, and its `write-app-secrets` writes each app's sealed values to its namespace's path | `openbaoscript_test.go` |
@@ -149,8 +155,9 @@ therefore runs `scripts/ci/localpv-lvm-proof.sh` as root on a Ubicloud
 runner, which is a disposable VM. The script does this, in order:
 
 1. It creates a 4G loop device and makes volume group `vg0` on it.
-2. It installs k3s `v1.36.3+k3s1`, the version the module pins, after
-   checking its sha256, and starts it with `local-storage` and `traefik`
+2. It copies k3s `v1.36.3+k3s1`, the version the module pins, out of
+   `registry.rancher.com/rancher/k3s-upgrade` by digest, checks its sha256,
+   and starts it with `local-storage` and `traefik`
    disabled, as the rendered k3s config does.
 3. It applies `clusterbases/localpv-lvm/` into `kube-system` and waits for
    the controller and node plugin to roll out.
@@ -182,8 +189,8 @@ The script does this, in order:
    `02-boot-components.yaml`, `02-openbao-tls.yaml` and `04-openbao-boot.yaml`
    into k3s's auto-deploy directory. It changes only the image, points the Job
    at the fake GitHub, and shortens OpenBao's serving certificate to an hour,
-   renewed two minutes after each issue. It starts k3s `v1.36.3+k3s1` after
-   checking its sha256.
+   renewed two minutes after each issue. It starts k3s `v1.36.3+k3s1`, copied
+   out of the k3s-upgrade image by digest, after checking its sha256.
 4. It waits for the Job `openbao-init` to complete.
 5. It reads the authority from the ConfigMap `openbao-ca` and checks that a
    request to `https://openbao.openbao.svc:8200/v1/sys/health` verifies it and
@@ -198,7 +205,8 @@ The script does this, in order:
    `testdata/boot/github-app.pem`.
 9. It fetches the certificate the controller publishes and checks it is the
    one in `testdata/boot/`. It seals a newly generated `.pem` against it with
-   kubeseal 0.40.0, applies it, and checks that the writer moves the key in
+   kubeseal 0.40.0, copied out of `docker.io/bitnami/sealed-secrets-kubeseal`
+   by digest, applies it, and checks that the writer moves the key in
    OpenBao to the new file's sha256.
 10. It seals a value for each of the slice namespaces `app-a` and `app-b`, and
     checks that each namespace's service account reads its own and is refused
