@@ -152,13 +152,17 @@ func runEnrolScript(t *testing.T, script, env, url, caFile string, bound time.Du
 	return testutil.RunSh(t, "enrol", script, bound, run, []string{enrolScriptURLEnv + "=" + url, testutil.EnrolScriptDirEnv + "=" + run.Dir, testutil.EnrolManifestsDirEnv + "=" + run.Manifests}, caFile, opts)
 }
 
-// nodeAgentDir lays out the image's scripts as the Dockerfile's COPY lines do.
+// nodeAgentDir lays out the image's scripts as the Dockerfile's COPY lines do, and the tools it copies from other images as imageToolFakes.
 func nodeAgentDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
+	for rel, fake := range imageToolFakes(t) {
+		testutil.FatalIf(t, os.MkdirAll(filepath.Join(dir, filepath.Dir(rel)), 0o755) != nil, "making the directory of %s", rel)
+		testutil.WriteIn(t, dir, rel, fake, 0o755)
+	}
 	for _, line := range strings.Split(testutil.TestRepoFile(t, "scripts/nodeagent/Dockerfile"), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 3 || fields[0] != "COPY" {
+		if len(fields) < 3 || fields[0] != "COPY" || strings.HasPrefix(fields[1], "--from=") {
 			continue
 		}
 		if strings.HasPrefix(fields[1], "--chmod=") {
@@ -174,6 +178,24 @@ func nodeAgentDir(t *testing.T) string {
 		}
 	}
 	return dir
+}
+
+// imageToolFakes holds, by its path under /opt/mitstack, a fake naming the image and file of each COPY --from line.
+func imageToolFakes(t *testing.T) map[string]string {
+	t.Helper()
+	fakes := map[string]string{}
+	for _, line := range strings.Split(testutil.TestRepoFile(t, "scripts/nodeagent/Dockerfile"), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 4 || fields[0] != "COPY" || !strings.HasPrefix(fields[1], "--from=") {
+			continue
+		}
+		rel := strings.TrimPrefix(fields[3], "/opt/mitstack/")
+		if strings.HasSuffix(rel, "/") {
+			rel += filepath.Base(fields[2])
+		}
+		fakes[rel] = "a fake " + fields[2] + " from " + strings.TrimPrefix(fields[1], "--from=") + "\n"
+	}
+	return fakes
 }
 
 // fakeNsenter runs its command in the test's own namespaces once it is asked for all five of process 1's.

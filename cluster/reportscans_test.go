@@ -44,8 +44,7 @@ func withFakeScanners(t *testing.T) (reportOption, fakeScanners) {
 	testutil.WriteIn(t, f.launcher, "systemd-run", testFile("fakes/systemd-run.sh"), 0o755)
 	return func(r *reportRig) {
 		r.env = append(r.env, withEnv(scanKubeBenchEnv, f.bench.Path), withEnv(scanKubescapeEnv, filepath.Join(f.scape, "kubescape")),
-			withEnv(scanKubeconfigEnv, filepath.Join(r.t.TempDir(), "k3s.yaml")), withEnv(scanURLEnv, closedHTTPURL(r.t)+"/"),
-			withEnv(scanRawURLEnv, closedHTTPURL(r.t)+"/"), withEnv(reportSystemdRunEnv, filepath.Join(f.launcher, "systemd-run")))
+			withEnv(scanKubeconfigEnv, filepath.Join(r.t.TempDir(), "k3s.yaml")), withEnv(reportSystemdRunEnv, filepath.Join(f.launcher, "systemd-run")))
 	}, f
 }
 
@@ -117,6 +116,21 @@ func TestReportScript_SecurityScans(t *testing.T) {
 			testutil.FailIf(t, busyScanners.ran(t), "a scanner ran while systemd-run refused a second unit")
 			testutil.FailIf(t, string(m.LastRun) != "null", "securityScans.lastRun is %s, want null before any run finished", m.LastRun)
 		}},
+		{name: "copies the image's scan tools onto the host once for each scan script", manual: true, check: func(t *testing.T, r *reportRig) {
+			state := stateDirHolding(t, testFile("report/patch-check.json"))
+			copied := filepath.Join(state, "scan-tools", "image")
+			testutil.FatalIf(t, os.MkdirAll(copied, 0o700) != nil, "making the host's earlier copy")
+			testutil.WriteIn(t, copied, "kube-bench", "a copy kept for another scan script\n", 0o700)
+			r.env = append(r.env, withEnv(testutil.ReportStateDirEnv, state))
+
+			r.send()
+			assertHostHoldsImageScanTools(t, copied)
+			edited := testutil.WriteIn(t, copied, "kube-bench", "edited after the copy\n", 0o700)
+			r.send()
+
+			kept, err := os.ReadFile(edited)
+			testutil.FailIf(t, err != nil || string(kept) != "edited after the copy\n", "the second report left the host's kube-bench holding %q (%v), want it untouched while the scan script is unchanged", kept, err)
+		}},
 		{name: "carries a kept summary at its bound whole", opts: []reportOption{withStateDirFiles(map[string]string{
 			kubeBenchSummaryFile: largestScanSummary("kube-bench"), kubescapeSummaryFile: largestScanSummary("kubescape")})}, check: func(t *testing.T, r *reportRig) {
 			m := securityScansOf(t, r.fields())
@@ -131,6 +145,21 @@ func TestReportScript_SecurityScans(t *testing.T) {
 		}},
 	}
 	runReportCases(t, cases)
+}
+
+func assertHostHoldsImageScanTools(t *testing.T, copied string) {
+	t.Helper()
+	fakes := imageToolFakes(t)
+	for _, tool := range []string{"scan-tools/kube-bench", "scan-tools/kubescape"} {
+		_, ok := fakes[tool]
+		testutil.FatalIf(t, !ok, "the node agent's image carries no %s copied from its publisher's image", tool)
+	}
+	for rel, fake := range fakes {
+		got, err := os.ReadFile(filepath.Join(copied, strings.TrimPrefix(rel, "scan-tools/")))
+		testutil.FailIf(t, err != nil || string(got) != fake, "the host's copy of %s holds %q (%v), want the image's %q", rel, got, err, fake)
+	}
+	_, err := os.Stat(copied + ".partial")
+	testutil.FailIf(t, err == nil, "the host keeps %s.partial after the copy", copied)
 }
 
 func fakeKubescapeRan(t *testing.T, dir string) bool {
