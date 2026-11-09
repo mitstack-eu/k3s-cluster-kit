@@ -14,6 +14,7 @@ set -euo pipefail
 manifest=testdata/golden/seed/node-agent.yaml
 k3s_version=v1.36.3+k3s1
 k3s_sha256=2f98a9f8fe5782479ee2d54e70a1b10a7f6fd4cae8d38ed3098452dc6eed76b5
+k3s_image=registry.rancher.com/rancher/k3s-upgrade:v1.36.3-k3s1@sha256:2444dd12ac03486408b99d059ed04383b78f4b536f1cba8d55a7e753aac4f962
 image=mitstack-node-agent:proof
 seeded=$(mktemp)
 
@@ -45,8 +46,9 @@ docker save "$image" -o /var/lib/rancher/k3s/agent/images/mitstack-node-agent.ta
 echo "::endgroup::"
 
 echo "::group::k3s ${k3s_version}"
-curl -fsSL --proto '=https' -o /usr/local/bin/k3s \
-  "https://github.com/k3s-io/k3s/releases/download/${k3s_version/+/%2B}/k3s"
+container=$(docker create "$k3s_image")
+docker cp "$container:/opt/k3s" /usr/local/bin/k3s
+docker rm "$container" > /dev/null
 echo "${k3s_sha256}  /usr/local/bin/k3s" | sha256sum -c -
 chmod 755 /usr/local/bin/k3s
 k3s server --disable local-storage --disable traefik --write-kubeconfig-mode 600 \

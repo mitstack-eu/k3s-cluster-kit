@@ -17,8 +17,9 @@ golden=testdata/golden/userdata-hosts-platform.yaml
 fixtures=testdata/boot
 k3s_version=v1.36.3+k3s1
 k3s_sha256=2f98a9f8fe5782479ee2d54e70a1b10a7f6fd4cae8d38ed3098452dc6eed76b5
-kubeseal_url=https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.40.0/kubeseal-0.40.0-linux-amd64.tar.gz
-kubeseal_sha256=9314c35916646e9d59c8f06b1314574b4e79c4d76f079433607ed7b697bb5eb7
+k3s_image=registry.rancher.com/rancher/k3s-upgrade:v1.36.3-k3s1@sha256:2444dd12ac03486408b99d059ed04383b78f4b536f1cba8d55a7e753aac4f962
+kubeseal_image=docker.io/bitnami/sealed-secrets-kubeseal:0.40.0@sha256:e7d28a3dc3efb1e0a00356a5292a67c12c44481da9019f3e9a07236f6a273623
+kubeseal_sha256=1fb01b0b9a43922a39f6e41e94d53a757acdbb8b24d3e14a370b2f4beadd8a2f
 manifests=/var/lib/rancher/k3s/server/manifests
 image=mitstack-node-agent:proof
 github_port=8999
@@ -149,8 +150,9 @@ PY
 echo "::endgroup::"
 
 echo "::group::k3s ${k3s_version}, which applies the boot manifests"
-curl -fsSL --proto '=https' -o /usr/local/bin/k3s \
-  "https://github.com/k3s-io/k3s/releases/download/${k3s_version/+/%2B}/k3s"
+container=$(docker create "$k3s_image")
+docker cp "$container:/opt/k3s" /usr/local/bin/k3s
+docker rm "$container" > /dev/null
 echo "${k3s_sha256}  /usr/local/bin/k3s" | sha256sum -c -
 chmod 755 /usr/local/bin/k3s
 k3s server --disable local-storage --disable traefik --write-kubeconfig-mode 600 \
@@ -250,9 +252,10 @@ echo "openbao-boot-proof: PASS: the App key sealed in the user data reached kv a
 echo "::endgroup::"
 
 echo "::group::a key sealed by kubeseal against the controller's certificate"
-curl -fsSL --proto '=https' -o "$work/kubeseal.tar.gz" "$kubeseal_url"
-echo "${kubeseal_sha256}  $work/kubeseal.tar.gz" | sha256sum -c -
-tar -xzf "$work/kubeseal.tar.gz" -C "$work" kubeseal
+container=$(docker create "$kubeseal_image")
+docker cp "$container:/usr/local/bin/kubeseal" "$work/kubeseal"
+docker rm "$container" > /dev/null
+echo "${kubeseal_sha256}  $work/kubeseal" | sha256sum -c -
 "$work/kubeseal" --controller-namespace kube-system --controller-name sealed-secrets-controller --fetch-cert >"$work/published.crt"
 cmp -s "$work/published.crt" "$fixtures/sealed-secrets.crt" || fail "the controller publishes another certificate than the block wrote"
 openssl genrsa -traditional -out "$work/rotated.pem" 2048 2>/dev/null

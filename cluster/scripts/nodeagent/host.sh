@@ -9,7 +9,8 @@ set -eu
 dir=$(dirname "$0")
 host_dir=${MITSTACK_HOST_DIR:-/run/mitstack-host}
 
+# The host sees this container's files under /proc/<pid>/root.
 nsenter -t 1 -m -u -i -n -p -- /bin/sh -c "$(cat "$dir/collect.sh")" collect \
-  "$(cat "$dir/mitstack-patch-check.sh")" "$(cat "$dir/mitstack-scan.py")" \
+  "$(cat "$dir/mitstack-patch-check.sh")" "$(cat "$dir/mitstack-scan.py")" "/proc/$$/root$dir/scan-tools" \
   < /dev/null > "$host_dir/host.tar.partial"
 mv -f "$host_dir/host.tar.partial" "$host_dir/host.tar"

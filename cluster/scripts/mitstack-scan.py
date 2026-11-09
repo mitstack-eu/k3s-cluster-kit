@@ -2,13 +2,13 @@
 # Runs kube-bench's k3s CIS benchmark and kubescape's NSA framework on the
 # node, each at most once a day, and keeps a bounded summary of each run in
 # kube-bench.json and kubescape.json for the node report to carry.
-# Usage: python3 -I mitstack-scan.py, started detached as the transient unit
-# mitstack-scan.service by mitstack-report once it has checked these bytes
-# against the SHA-256 the user data pins; the MITSTACK_* variables override
-# its paths, tools and downloads so it can run off a node.
+# Usage: python3 -I mitstack-scan.py, started detached on the host as the
+# transient unit mitstack-scan.service by the node agent's collector; the
+# MITSTACK_* variables override its paths and tools so it can run off a node.
+# python3 -I mitstack-scan.py check fails naming each tool the node agent's
+# image carries whose files differ from their pin, and the image's build runs it.
 # It exists so the platform can judge the cluster against the CIS Kubernetes
-# Benchmark and the NSA and CISA guide, and it ships through the cluster
-# repository because the user data has no room for it.
+# Benchmark and the NSA and CISA guide.
 import hashlib
 import json
 import os
@@ -16,7 +16,6 @@ import re
 import shutil
 import subprocess
 import sys
-import tarfile
 import tempfile
 import time
 import urllib.request
@@ -28,21 +27,22 @@ kubeconfig = E("MITSTACK_KUBECONFIG", "/etc/rancher/k3s/k3s.yaml")
 github = E("MITSTACK_SCAN_URL", "https://github.com/")
 raw = E("MITSTACK_SCAN_RAW_URL", "https://raw.githubusercontent.com/")
 tools = state + "/scan-tools"
+image_tools = E("MITSTACK_SCAN_TOOLS", tools + "/image") + "/"
 FMT = "%Y-%m-%dT%H:%M:%SZ"
 
-# Each download set is its base, its files and their SHA-256 joined in
-# order, as cat a b | sha256sum prints it. kube-bench's releases stop at
-# k3s-cis-1.9, so its config comes from the commit that added k3s-cis-1.11.
-KUBE_BENCH = (github + "aquasecurity/kube-bench/releases/download/v0.16.0/",
-              ["kube-bench_0.16.0_linux_amd64.tar.gz"],
-              "sha256:82dbc7e598740dc9344d41f8ad0b8210d57c4c00bdb2c5f1d8a69a2b98baddcf")
+# Each tool the node agent's image carries is its files and their SHA-256
+# joined in order, as cat a b | sha256sum prints it. kube-bench is the build
+# its publisher's v0.16.0 image carries.
+KUBE_BENCH = (["kube-bench"], "sha256:eef60e293d0cb7ed78c7fd5121d6b49e035431fe69db314abcff798ffabdb50a")
+KUBESCAPE = (["kubescape"], "sha256:011569dbcde85afc96cf63262e4f967166b6680fd70a623e9065334b6767b244")
+IMAGE_TOOLS = (KUBE_BENCH, KUBESCAPE)
+# Each download set is its base, its files and their SHA-256 joined in order.
+# kube-bench's releases stop at k3s-cis-1.9, so its config comes from the
+# commit that added k3s-cis-1.11.
 KUBE_BENCH_CONFIG = (raw + "aquasecurity/kube-bench/e278a5915a982f2756026de6e2f9ca77077ef9f9/cfg/",
                      ["config.yaml"] + ["k3s-cis-1.11/%s.yaml" % n
                                         for n in ("config", "master", "etcd", "controlplane", "node", "policies")],
                      "sha256:543e30202ac23ef52b7087d1add8cdf852a320342f73718f62f4e8f1be9790f6")
-KUBESCAPE = (github + "kubescape/kubescape/releases/download/v4.0.15/",
-             ["kubescape_4.0.15_linux_amd64"],
-             "sha256:011569dbcde85afc96cf63262e4f967166b6680fd70a623e9065334b6767b244")
 NSA_FRAMEWORK = (github + "kubescape/regolibrary/releases/download/v2.0.38/",
                  ["nsa", "default_config_inputs"],
                  "sha256:b40328283b5cffe90884ae1da5d9b652ab8c4be384d7367e895fa8873e804291")
@@ -88,8 +88,7 @@ def digest(paths):
 
 # fetch downloads a set once into a directory named by its digest and checks
 # the digest on every run, so a set changed on disk is removed and the run
-# fails; kube-bench's binary is extracted afresh from its checked archive on
-# every run for the same reason.
+# fails.
 def fetch(base, names, want):
     d = tools + "/" + want.removeprefix("sha256:")
     if not os.path.isdir(d):
@@ -104,6 +103,34 @@ def fetch(base, names, want):
         shutil.rmtree(d)
         raise ValueError("%s%s has %s, want %s" % (base, names[0], got, want))
     return d + "/"
+
+
+def verify(names, want):
+    got = "sha256:" + digest(image_tools + n for n in names)
+    if got != want:
+        raise ValueError("%s%s has %s, want %s" % (image_tools, names[0], got, want))
+
+
+# checked is the host's copy of the image's tools once a tool's files match its
+# pin. A copy that does not is removed, so the next report copies it again.
+def checked(names, want):
+    try:
+        verify(names, want)
+    except ValueError:
+        shutil.rmtree(image_tools, True)
+        raise
+    return image_tools + names[0]
+
+
+def check():
+    failed = 0
+    for names, want in IMAGE_TOOLS:
+        try:
+            verify(names, want)
+        except (OSError, ValueError) as e:
+            print("mitstack-scan check: %s" % e, file=sys.stderr)
+            failed = 1
+    return failed
 
 
 def run(argv, timeout):
@@ -126,10 +153,7 @@ def kube_bench(s, version, work):
     exe = os.environ.get("MITSTACK_KUBE_BENCH")
     config = os.path.dirname(exe or "") + "/"
     if not exe:
-        archive = fetch(*KUBE_BENCH) + KUBE_BENCH[1][0]
-        exe = work + "/kube-bench"
-        with tarfile.open(archive) as tar:
-            write_private(exe, tar.extractfile("kube-bench").read(), 0o700)
+        exe = checked(*KUBE_BENCH)
         config = fetch(*KUBE_BENCH_CONFIG)
     out = json.loads(run([exe, "run", "--config-dir", config, "--benchmark", PROFILE, "--targets", TARGETS, "--json"], 900))
     totals = out["Totals"]
@@ -156,8 +180,7 @@ def kubescape(s, version, work):
     exe = os.environ.get("MITSTACK_KUBESCAPE")
     framework = os.path.dirname(exe or "") + "/"
     if not exe:
-        exe = fetch(*KUBESCAPE) + KUBESCAPE[1][0]
-        os.chmod(exe, 0o700)
+        exe = checked(*KUBESCAPE)
         framework = fetch(*NSA_FRAMEWORK)
     with open(framework + "default_config_inputs", "rb") as f:
         inputs = json.load(f)["settings"]["postureControlInputs"]
@@ -222,6 +245,8 @@ def finish(line, status):
     sys.exit(status)
 
 
+if sys.argv[1:] == ["check"]:
+    sys.exit(check())
 # The node's kubelet version is the Kubernetes the profile must match, and
 # reading it shows the cluster answers, since a scan of no cluster proves
 # nothing.
