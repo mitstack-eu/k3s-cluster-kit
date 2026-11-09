@@ -13,23 +13,28 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/mitstack-eu/block-kit/helpers/tools"
 	"go.yaml.in/yaml/v3"
 )
 
-// Versions are what the user data installs from and what the cluster repository's seed installs.
+// Versions are what the user data installs from and what the cluster repository's seed installs. K3sImage is
+// the image, named by digest, whose /opt/k3s is the k3s binary at K3sSHA256, and K3sInstaller is install.sh in
+// an image by digest.
 type Versions struct {
-	K3sVersion, K3sSHA256, K3sInstallerCommit, K3sInstallerSHA256, CiliumVersion, ArgoCDChartVersion string
-	KuredChartVersion, SystemUpgradeControllerVersion                                                string
-	TraefikChartVersion, CertManagerChartVersion                                                     string
-	KyvernoChartVersion                                                                              string
+	K3sVersion, K3sSHA256, K3sImage                   string
+	K3sInstaller                                      tools.File
+	CiliumVersion, ArgoCDChartVersion                 string
+	KuredChartVersion, SystemUpgradeControllerVersion string
+	TraefikChartVersion, CertManagerChartVersion      string
+	KyvernoChartVersion                               string
 }
 
 // PinnedVersions are the reviewed pins a new server installs; the k3s binary and installer digests are kube-hetzner v3.2.1's.
 var PinnedVersions = Versions{
 	K3sVersion:                     "v1.36.3+k3s1",
 	K3sSHA256:                      "2f98a9f8fe5782479ee2d54e70a1b10a7f6fd4cae8d38ed3098452dc6eed76b5",
-	K3sInstallerCommit:             "2d0f82fa2f933cd227fe38e1482558ce4769f464",
-	K3sInstallerSHA256:             "ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b",
+	K3sImage:                       "registry.rancher.com/rancher/k3s-upgrade:v1.36.3-k3s1@sha256:2444dd12ac03486408b99d059ed04383b78f4b536f1cba8d55a7e753aac4f962",
+	K3sInstaller:                   tools.K3sInstaller,
 	CiliumVersion:                  "1.19.3",
 	ArgoCDChartVersion:             "10.9.7",
 	KuredChartVersion:              "6.1.0",
@@ -50,6 +55,7 @@ const (
 	nodeScriptPath  = "/usr/local/sbin/mitstack-hcloud-node"
 	enrolScriptPath = "/usr/local/sbin/mitstack-enrol"
 	installerPath   = "/usr/local/sbin/mitstack-install-k3s"
+	copyHelperPath  = "/usr/local/sbin/mitstack-copy-tool"
 	manifestsDir    = "/var/lib/rancher/k3s/server/manifests"
 	UnitDir         = "/etc/systemd/system"
 	guardRulesPath  = "/etc/mitstack/metadata-guard.nft"
@@ -69,7 +75,8 @@ const (
 var (
 	k3sVersionRe    = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?\+k3s[0-9]+$`)
 	SHA256HexRe     = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	commitRe        = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	imageByDigestRe = regexp.MustCompile(`^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9._/-]+(:[A-Za-z0-9._-]+)?@sha256:[0-9a-f]{64}$`)
+	imagePathRe     = regexp.MustCompile(`^/[A-Za-z0-9._/-]+$`)
 	chartVersionRe  = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`)
 	releaseTagRe    = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$`)
 	httpsURLRe      = regexp.MustCompile(`^https://[^\s'"\\` + "`" + `$]+$`)
@@ -110,8 +117,10 @@ func (in UserDataInputs) validate() error {
 		{"EnrolmentToken", in.EnrolmentToken, SHA256HexRe},
 		{"K3sVersion", v.K3sVersion, k3sVersionRe},
 		{"K3sSHA256", v.K3sSHA256, SHA256HexRe},
-		{"K3sInstallerCommit", v.K3sInstallerCommit, commitRe},
-		{"K3sInstallerSHA256", v.K3sInstallerSHA256, SHA256HexRe},
+		{"K3sImage", v.K3sImage, imageByDigestRe},
+		{"K3sInstaller.Image", v.K3sInstaller.Image, imageByDigestRe},
+		{"K3sInstaller.Path", v.K3sInstaller.Path, imagePathRe},
+		{"K3sInstaller.SHA256", v.K3sInstaller.SHA256, SHA256HexRe},
 		{"CiliumVersion", v.CiliumVersion, chartVersionRe},
 		{"ArgoCDChartVersion", v.ArgoCDChartVersion, chartVersionRe},
 		{"KuredChartVersion", v.KuredChartVersion, chartVersionRe},
@@ -205,6 +214,7 @@ func nodeScriptFiles(v Versions) ([]CloudInitFile, error) {
 	scripts := []struct{ path, script string }{
 		{nodeScriptPath, nodeScript},
 		{enrolScriptPath, enrolScript},
+		{copyHelperPath, tools.CopyScript},
 		{installerPath, installer},
 	}
 	files := make([]CloudInitFile, 0, len(scripts))
@@ -541,20 +551,9 @@ func clusterRootApplication(repoURL string) argoApplication {
 	}
 }
 
-// installerValues carries K3sVersionPath with "+" escaped, as the release download URL spells it.
-type installerValues struct {
-	K3sVersion, K3sVersionPath, K3sSHA256, K3sInstallerCommit, K3sInstallerSHA256 string
-}
-
 func renderInstaller(v Versions) (string, error) {
 	var b bytes.Buffer
-	err := installerScript.Execute(&b, installerValues{
-		K3sVersion:         v.K3sVersion,
-		K3sVersionPath:     strings.ReplaceAll(v.K3sVersion, "+", "%2B"),
-		K3sSHA256:          v.K3sSHA256,
-		K3sInstallerCommit: v.K3sInstallerCommit,
-		K3sInstallerSHA256: v.K3sInstallerSHA256,
-	})
+	err := installerScript.Execute(&b, v)
 	if err != nil {
 		return "", fmt.Errorf("rendering the k3s installer: %w", err)
 	}

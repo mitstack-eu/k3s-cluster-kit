@@ -18,34 +18,27 @@ import subprocess
 import sys
 import tempfile
 import time
-import urllib.request
 
 E = lambda k, d: os.environ.get(k) or d
 state = E("MITSTACK_STATE_DIR", "/var/lib/mitstack")
 k3s = E("MITSTACK_K3S", "/usr/local/bin/k3s")
 kubeconfig = E("MITSTACK_KUBECONFIG", "/etc/rancher/k3s/k3s.yaml")
-github = E("MITSTACK_SCAN_URL", "https://github.com/")
-raw = E("MITSTACK_SCAN_RAW_URL", "https://raw.githubusercontent.com/")
 tools = state + "/scan-tools"
 image_tools = E("MITSTACK_SCAN_TOOLS", tools + "/image") + "/"
 FMT = "%Y-%m-%dT%H:%M:%SZ"
 
 # Each tool the node agent's image carries is its files and their SHA-256
 # joined in order, as cat a b | sha256sum prints it. kube-bench is the build
-# its publisher's v0.16.0 image carries.
+# its publisher's v0.16.0 image carries. kube-bench's releases stop at
+# k3s-cis-1.9, so its config is the commit that added k3s-cis-1.11.
 KUBE_BENCH = (["kube-bench"], "sha256:eef60e293d0cb7ed78c7fd5121d6b49e035431fe69db314abcff798ffabdb50a")
-KUBESCAPE = (["kubescape"], "sha256:011569dbcde85afc96cf63262e4f967166b6680fd70a623e9065334b6767b244")
-IMAGE_TOOLS = (KUBE_BENCH, KUBESCAPE)
-# Each download set is its base, its files and their SHA-256 joined in order.
-# kube-bench's releases stop at k3s-cis-1.9, so its config comes from the
-# commit that added k3s-cis-1.11.
-KUBE_BENCH_CONFIG = (raw + "aquasecurity/kube-bench/e278a5915a982f2756026de6e2f9ca77077ef9f9/cfg/",
-                     ["config.yaml"] + ["k3s-cis-1.11/%s.yaml" % n
-                                        for n in ("config", "master", "etcd", "controlplane", "node", "policies")],
+KUBE_BENCH_CONFIG = (["kube-bench-cfg/config.yaml"] + ["kube-bench-cfg/k3s-cis-1.11/%s.yaml" % n
+                                                       for n in ("config", "master", "etcd", "controlplane", "node", "policies")],
                      "sha256:543e30202ac23ef52b7087d1add8cdf852a320342f73718f62f4e8f1be9790f6")
-NSA_FRAMEWORK = (github + "kubescape/regolibrary/releases/download/v2.0.38/",
-                 ["nsa", "default_config_inputs"],
+KUBESCAPE = (["kubescape"], "sha256:011569dbcde85afc96cf63262e4f967166b6680fd70a623e9065334b6767b244")
+NSA_FRAMEWORK = (["nsa-framework/nsa", "nsa-framework/default_config_inputs"],
                  "sha256:b40328283b5cffe90884ae1da5d9b652ab8c4be384d7367e895fa8873e804291")
+IMAGE_TOOLS = (KUBE_BENCH, KUBE_BENCH_CONFIG, KUBESCAPE, NSA_FRAMEWORK)
 PROFILE = "k3s-cis-1.11"
 TARGETS = "master,etcd,controlplane,node,policies"
 SEVERITIES = ("Critical", "High", "Medium", "Low")
@@ -84,25 +77,6 @@ def digest(paths):
             for chunk in iter(lambda: f.read(1 << 20), b""):
                 h.update(chunk)
     return h.hexdigest()
-
-
-# fetch downloads a set once into a directory named by its digest and checks
-# the digest on every run, so a set changed on disk is removed and the run
-# fails.
-def fetch(base, names, want):
-    d = tools + "/" + want.removeprefix("sha256:")
-    if not os.path.isdir(d):
-        shutil.rmtree(d + ".partial", True)
-        for n in names:
-            os.makedirs(os.path.dirname(d + ".partial/" + n), exist_ok=True)
-            with urllib.request.urlopen(base + n, timeout=60) as r, open(d + ".partial/" + n, "wb") as f:
-                shutil.copyfileobj(r, f, 1 << 20)
-        os.replace(d + ".partial", d)
-    got = "sha256:" + digest(d + "/" + n for n in names)
-    if got != want:
-        shutil.rmtree(d)
-        raise ValueError("%s%s has %s, want %s" % (base, names[0], got, want))
-    return d + "/"
 
 
 def verify(names, want):
@@ -154,7 +128,7 @@ def kube_bench(s, version, work):
     config = os.path.dirname(exe or "") + "/"
     if not exe:
         exe = checked(*KUBE_BENCH)
-        config = fetch(*KUBE_BENCH_CONFIG)
+        config = os.path.dirname(checked(*KUBE_BENCH_CONFIG)) + "/"
     out = json.loads(run([exe, "run", "--config-dir", config, "--benchmark", PROFILE, "--targets", TARGETS, "--json"], 900))
     totals = out["Totals"]
     s["totals"] = {k: totals["total_" + k] for k in ("pass", "fail", "warn", "info")}
@@ -181,7 +155,7 @@ def kubescape(s, version, work):
     framework = os.path.dirname(exe or "") + "/"
     if not exe:
         exe = checked(*KUBESCAPE)
-        framework = fetch(*NSA_FRAMEWORK)
+        framework = os.path.dirname(checked(*NSA_FRAMEWORK)) + "/"
     with open(framework + "default_config_inputs", "rb") as f:
         inputs = json.load(f)["settings"]["postureControlInputs"]
     write_private(work + "/inputs.json", json.dumps(inputs).encode())

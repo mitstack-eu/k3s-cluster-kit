@@ -1,9 +1,10 @@
 #!/bin/sh
-# Installs k3s from install.sh at a pinned k3s-io/k3s commit and the amd64
-# release binary, each checked against its pinned SHA-256.
+# Installs k3s from install.sh and the amd64 binary, each copied out of an
+# image named by digest by the mitstack-copy-tool beside it and checked
+# against its pinned SHA-256.
 # Usage: mitstack-install-k3s, run by cloud-init once the node is enrolled.
 # It exists so a node runs only the reviewed k3s bytes, never whatever
-# install.sh would fetch.
+# install.sh or a release page would serve.
 set -eu
 
 fail() {
@@ -11,11 +12,10 @@ fail() {
   exit 1
 }
 
-download() {
+copy() {
   attempt=1
   while :; do
-    if curl -fsS --proto '=https' --proto-redir '=https' --tlsv1.2 --location \
-      --connect-timeout 20 --max-time 900 --output "$1" "$2"; then
+    if "$(dirname "$0")/mitstack-copy-tool" "$2" "$3" "$4" "$1"; then
       return 0
     fi
     if [ "$attempt" -ge 5 ]; then
@@ -41,11 +41,11 @@ umask 077
 work_dir=$(mktemp -d)
 trap 'rm -rf "$work_dir"' EXIT
 
-download "$work_dir/install.sh" 'https://raw.githubusercontent.com/k3s-io/k3s/{{.K3sInstallerCommit}}/install.sh' ||
-  fail "could not download the k3s installer"
-verify "$work_dir/install.sh" '{{.K3sInstallerSHA256}}' "the k3s installer"
-download "$work_dir/k3s" 'https://github.com/k3s-io/k3s/releases/download/{{.K3sVersionPath}}/k3s' ||
-  fail "could not download the k3s binary"
+copy "$work_dir/install.sh" '{{.K3sInstaller.Image}}' '{{.K3sInstaller.Path}}' '{{.K3sInstaller.SHA256}}' ||
+  fail "could not copy the k3s installer from {{.K3sInstaller.Image}}"
+verify "$work_dir/install.sh" '{{.K3sInstaller.SHA256}}' "the k3s installer"
+copy "$work_dir/k3s" '{{.K3sImage}}' /opt/k3s '{{.K3sSHA256}}' ||
+  fail "could not copy the k3s binary from {{.K3sImage}}"
 verify "$work_dir/k3s" '{{.K3sSHA256}}' "the k3s binary {{.K3sVersion}}"
 install -o root -g root -m 0755 "$work_dir/k3s" /usr/local/bin/k3s
 
