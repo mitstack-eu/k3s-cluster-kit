@@ -91,7 +91,7 @@ func binaryLine(v Versions) string {
 	return "mitstack-install-k3s: the k3s binary " + v.K3sVersion + " matches SHA-256 " + v.K3sSHA256
 }
 
-func TestInstaller_ANodeWithNoContainerRuntimeReadsK3sAndInstallShByDigestOverTheRegistrysHTTPAPI(t *testing.T) {
+func TestInstaller_ANodeWithNoContainerRuntimeReadsK3sAndInstallShByDigestOverTheRegistrysHTTPAPIAndPrintsEachPinItMatched(t *testing.T) {
 	images := newFakeK3sImages(t)
 
 	run := runInstaller(t, images)
@@ -104,14 +104,6 @@ func TestInstaller_ANodeWithNoContainerRuntimeReadsK3sAndInstallShByDigestOverTh
 		}
 	}
 	testutil.FailIf(t, run.installArgs == nil, "the installer never ran install; want it to install the copied k3s\n%s", run.output)
-}
-
-func TestInstaller_PrintsEachVerifiedArtifactAndThePinnedDigestItMatched(t *testing.T) {
-	images := newFakeK3sImages(t)
-
-	run := runInstaller(t, images)
-
-	testutil.FatalIf(t, run.err != nil, "the installer over bytes that match their pins error = %v; want nil\n%s", run.err, run.output)
 	lines := strings.Split(strings.TrimRight(run.output, "\n"), "\n")
 	inst := slices.Index(lines, installerLine(images.versions))
 	bin := slices.Index(lines, binaryLine(images.versions))
@@ -126,8 +118,7 @@ func TestInstaller_AK3sCopyThatFailsInstallsNothingAndNamesTheImage(t *testing.T
 		breakIt func(f *fakeK3sImages)
 		says    string
 	}{
-		{"the layer holds other bytes than the pin", func(f *fakeK3sImages) { f.versions.K3sSHA256 = testutil.SHA256Hex("other bytes than the image holds") },
-			"has digest sha256:" + testutil.SHA256Hex(fakeK3sBinary)},
+		{"the layer holds other bytes than the pin", func(f *fakeK3sImages) { f.versions.K3sSHA256 = testutil.SHA256Hex("other bytes") }, "has digest sha256:" + testutil.SHA256Hex(fakeK3sBinary)},
 		{"the registry fails the layer read", func(f *fakeK3sImages) { f.reg.Fail(f.k3s.Layers[0], http.StatusNotFound) }, "HTTP 404"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

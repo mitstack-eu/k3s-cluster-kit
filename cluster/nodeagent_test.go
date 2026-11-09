@@ -32,8 +32,7 @@ func decodeDoc(t *testing.T, doc map[string]any, into any) {
 	testutil.FatalIf(t, err != nil || json.Unmarshal(raw, into) != nil, "decoding a %v from the seed: %v", doc["kind"], err)
 }
 
-// grantedRules is every rule the seed's bindings give the service account sa in mitstack-node, cluster-wide when
-// namespace is empty and in namespace otherwise.
+// grantedRules is every rule the seed's bindings give sa in mitstack-node, cluster-wide when namespace is empty.
 func grantedRules(t *testing.T, docs []map[string]any, sa, namespace string) []rbacv1.PolicyRule {
 	t.Helper()
 	roles := map[string][]rbacv1.PolicyRule{}
@@ -177,8 +176,7 @@ func TestNodeAgentSeed_RunsThePinnedImageWithAnAPITokenOnlyInTheReportContainer(
 	testutil.FailIf(t, !slices.Equal(mounts["host"], []string{"host-evidence"}), "the host container mounts %v, want only host-evidence, so it holds no token of its own", mounts["host"])
 }
 
-// kubectl skips the in-cluster config whenever a flag such as --request-timeout
-// overrides it and no kubeconfig file exists, and dials localhost:8080 instead.
+// kubectl given a flag such as --request-timeout and no kubeconfig file skips the in-cluster config and dials localhost:8080.
 func TestNodeAgentSeed_EveryKubectlContainerNamesTheImagesInClusterKubeconfig(t *testing.T) {
 	const kubeconfigPath = "/opt/mitstack/in-cluster.kubeconfig"
 	const tokenDir = "/var/run/secrets/kubernetes.io/serviceaccount"

@@ -248,9 +248,7 @@ func TestRenderSeed_KuredRebootsOnlyBetween0200And0300UTC(t *testing.T) {
 
 		configuration, ok := testutil.Dig(testutil.ChartValues(t, "kured Application", app), "configuration").(map[string]any)
 		testutil.FatalIf(t, !ok, "kured helm.values carries no configuration mapping")
-		// A drain a PodDisruptionBudget blocks gives up after 15 minutes
-		// and the reboot goes ahead, so kured never leaves the node
-		// cordoned.
+		// A drain a PodDisruptionBudget blocks gives up after 15 minutes, so kured never leaves the node cordoned.
 		testutil.AssertValues(t, "kured configuration", configuration, map[string]any{
 			"startTime":      "02:00",
 			"endTime":        "03:00",

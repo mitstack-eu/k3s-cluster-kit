@@ -35,8 +35,7 @@ type fakeScanners struct {
 	scape, launcher string
 }
 
-// withFakeScanners points the scan script at fakes printing the canned kube-bench and kubescape output, launched by a
-// systemd-run that runs the unit in the foreground.
+// withFakeScanners points the scan at fakes printing canned output, launched by a systemd-run running the unit in the foreground.
 func withFakeScanners(t *testing.T) (reportOption, fakeScanners) {
 	t.Helper()
 	f := fakeScanners{bench: testutil.NewFakeTool(t, "kube-bench", testFile("scan/kube-bench.json"), "", 0),
@@ -116,7 +115,7 @@ func TestReportScript_SecurityScans(t *testing.T) {
 			testutil.FailIf(t, busyScanners.ran(t), "a scanner ran while systemd-run refused a second unit")
 			testutil.FailIf(t, string(m.LastRun) != "null", "securityScans.lastRun is %s, want null before any run finished", m.LastRun)
 		}},
-		{name: "copies the image's scan tools onto the host once for each scan script", manual: true, check: func(t *testing.T, r *reportRig) {
+		{name: "copies the image's scan tools onto the host once for each scan script, never under a running scan", manual: true, check: func(t *testing.T, r *reportRig) {
 			state := stateDirHolding(t, testFile("report/patch-check.json"))
 			copied := filepath.Join(state, "scan-tools", "image")
 			testutil.FatalIf(t, os.MkdirAll(copied, 0o700) != nil, "making the host's earlier copy")
@@ -130,6 +129,12 @@ func TestReportScript_SecurityScans(t *testing.T) {
 
 			kept, err := os.ReadFile(edited)
 			testutil.FailIf(t, err != nil || string(kept) != "edited after the copy\n", "the second report left the host's kube-bench holding %q (%v), want it untouched while the scan script is unchanged", kept, err)
+			testutil.WriteIn(t, copied, ".scan-sha256", "the key of the scan script still running\n", 0o600)
+			withTool(testutil.ReportSystemctlEnv, "systemctl", cannedSSHUnits, "", cannedSSHUnitsExit, testutil.ToolAnswer{Args: "is-active --quiet mitstack-scan.service"})(r)
+			r.send()
+
+			kept, err = os.ReadFile(edited)
+			testutil.FailIf(t, err != nil || string(kept) != "edited after the copy\n", "a report while a scan runs left the host's kube-bench holding %q (%v), want the copy that scan reads untouched", kept, err)
 		}},
 		{name: "carries a kept summary at its bound whole", opts: []reportOption{withStateDirFiles(map[string]string{
 			kubeBenchSummaryFile: largestScanSummary("kube-bench"), kubescapeSummaryFile: largestScanSummary("kubescape")})}, check: func(t *testing.T, r *reportRig) {

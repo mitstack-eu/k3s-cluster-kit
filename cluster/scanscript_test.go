@@ -440,6 +440,18 @@ func TestScanScript_AHostCopyOfAnotherDigestIsNeverRunAndIsRemoved(t *testing.T)
 	}
 }
 
+func TestScanScript_RemovesEveryDigestNamedToolSetFromTheHost(t *testing.T) {
+	r := newScanRig(t)
+	for _, name := range []string{strings.Repeat("a", 64), strings.Repeat("b", 64) + ".partial"} {
+		testutil.FatalIf(t, os.MkdirAll(filepath.Join(r.state, "scan-tools", name, "k3s-cis-1.11"), 0o700) != nil, "making the host's set %s", name)
+	}
+
+	r.run()
+
+	entries, _ := os.ReadDir(filepath.Join(r.state, "scan-tools"))
+	testutil.FailIf(t, len(entries) != 0, "the host keeps %v in scan-tools, want every digest-named set removed, since no scan runs one", entries)
+}
+
 func TestScanScript_CheckFailsNamingEachToolTheImageCarriesAtAnotherDigest(t *testing.T) {
 	tools := t.TempDir()
 	testutil.WriteIn(t, tools, "kube-bench", "not the pinned build\n", 0o700)

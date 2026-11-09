@@ -465,8 +465,7 @@ type argocdAnswer struct {
 	Stderr string `json:"stderr"`
 }
 
-// cannedArgoCDAnswers is what an Argo CD that wants a session answers: userinfo 200 and settings 200, the rest 401.
-// Every body carries the sentinel, which no report may repeat.
+// cannedArgoCDAnswers is what an Argo CD that wants a session answers, each body carrying the sentinel no report may repeat.
 func cannedArgoCDAnswers() map[string]argocdAnswer {
 	answers := map[string]argocdAnswer{}
 	for _, path := range argocdRoutePaths {
