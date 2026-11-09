@@ -13,7 +13,10 @@ Every script the user data writes is a file in `scripts/`, and `scripts.go`
 loads each one with `go:embed`. You can read and lint a script as the shell
 it is. The node runs what the file holds, without its full-line comments and
 blank lines, which `stripCommentAndBlankLines` in `render.go` drops to keep
-the user data under Hetzner's 32 KiB cap.
+the user data small. Hetzner refuses user data of 32 KiB or more, and
+`CheckUserDataSize` is that check. `RenderUserData` leaves it to the block,
+which runs it where a document goes to Hetzner, since a dedicated server's
+document reaches the server another way.
 
 The user data also writes block-kit's copy helper, the `tools.CopyScript`
 the module imports, as `/usr/local/sbin/mitstack-copy-tool`. The installer
@@ -60,7 +63,7 @@ another image.
 | File in `scripts/nodeagent/` | What it does | Test file |
 |---|---|---|
 | `host.sh` | Runs as `mitstack-host` in the privileged container and runs `collect.sh` in the host's namespaces through `nsenter`, leaving `host.tar` | `reportscript_test.go` |
-| `collect.sh` | Collects the host evidence and the admin-configuration reads, dry-runs the admission fixtures, and starts the patch check, a dedicated server's probe and the scan. Before the scan starts, it copies the image's scan tools onto the host once for each scan script | `reportscript_test.go`, `reportscans_test.go` |
+| `collect.sh` | Collects the host evidence and the admin-configuration reads, dry-runs the admission fixtures, and starts the patch check, a dedicated server's probe and the scan. Before the scan starts, it copies the image's scan tools onto the host once for each scan script, and never while a scan runs | `reportscript_test.go`, `reportscans_test.go` |
 | `report.sh` | Runs as `mitstack-report`, adds its service account's reads and the Argo CD probes to the evidence in `host.tar`, and posts the report signed with what the proof script in `REPORT_PROOF_SCRIPT` prints for the exact body. When that script fails, prints nothing or prints more than one token, it posts the report unsigned and exits non-zero | `reportscript_test.go`, `reportproof_test.go`, `reportcompare_test.go` |
 | `repo-token.sh` | Runs as `mitstack-repo-token` and patches the password of each repository Secret | `repotokenscript_test.go` |
 | `openbao.py` | Runs as `mitstack-openbao` on mitstack's own cluster, where its `init` initialises OpenBao, its `write-app-key` keeps the GitHub App's key in OpenBao, and its `write-app-secrets` writes each app's sealed values to its namespace's path | `openbaoscript_test.go` |

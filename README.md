@@ -61,7 +61,7 @@ module wherever it renders or hardens a node. In hcloud-k3s-cluster:
 
 | Block function | File | What it takes from the module |
 |---|---|---|
-| `createServer` | `resource.go` | `RenderUserData` and `UserDataInputs` for a Cloud server |
+| `createServer` | `resource.go` | `RenderUserData` and `UserDataInputs` for a Cloud server, and `CheckUserDataSize` before Hetzner creates it |
 | `provisionServer` | `resource.go` | `RenderSeed` for the new cluster repository |
 | `pins` | `resource.go` | `Versions` and `PinnedVersions`, unless a test sets its own |
 | `ensureLoadBalancer`, `reachProblems`, `clusterFirewall` | `resource.go`, `observe.go`, `dedicated.go` | `LoadBalancerPrivateIP`, `HTTPNodePort` and `HTTPSNodePort`, the address and ports Traefik's seeded values name |
