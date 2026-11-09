@@ -738,6 +738,7 @@ func TestRenderUserData_RefusesAPinOutOfShape(t *testing.T) {
 		{"a k3s image on a host the copy helper refuses", "K3sImage", func(v *Versions) { v.K3sImage = "rancher/k3s-upgrade@sha256:" + strings.Repeat("a", 64) }},
 		{"an installer image carrying a space", "K3sInstaller.Image", func(v *Versions) { v.K3sInstaller.Image = "ghcr.io/a b@sha256:" + strings.Repeat("a", 64) }},
 		{"an installer path carrying a quote", "K3sInstaller.Path", func(v *Versions) { v.K3sInstaller.Path = "/k3s/install.sh'" }},
+		{"an installer sha256 carrying a quote", "K3sInstaller.SHA256", func(v *Versions) { v.K3sInstaller.SHA256 = strings.Repeat("a", 63) + "'" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			in := fixtureRenderInputs()
@@ -745,7 +746,7 @@ func TestRenderUserData_RefusesAPinOutOfShape(t *testing.T) {
 
 			_, err := RenderUserData(in)
 
-			value := reflect.ValueOf(in.Versions).FieldByName(tc.field).String()
+			value := fmt.Sprintf("%+v", reflect.ValueOf(in.Versions).FieldByName(strings.Split(tc.field, ".")[0]))
 			testutil.FatalIf(t, err == nil, "RenderUserData rendered with %s = %q, want a refusal", tc.field, value)
 			testutil.FailIf(t, !strings.Contains(err.Error(), tc.field), "RenderUserData refused %s = %q with %q, want the error to name %s", tc.field, value, err, tc.field)
 		})
