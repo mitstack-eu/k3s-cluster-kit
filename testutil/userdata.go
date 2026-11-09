@@ -153,8 +153,8 @@ func (cc CloudConfig) NodeScript(t *testing.T) CloudFile {
 
 func (cc CloudConfig) Installer(t *testing.T) CloudFile {
 	t.Helper()
-	return cc.onlyFileWhere(t, "the verified installer (downloads k3s-io/k3s install.sh)", func(f CloudFile) bool {
-		return strings.Contains(f.Content, "raw.githubusercontent.com/k3s-io/k3s/")
+	return cc.onlyFileWhere(t, "the verified installer (runs k3s's install.sh)", func(f CloudFile) bool {
+		return strings.Contains(f.Content, "INSTALL_K3S_SKIP_DOWNLOAD=true")
 	})
 }
 

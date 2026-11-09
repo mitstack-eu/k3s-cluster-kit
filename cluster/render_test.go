@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mitstack-eu/block-kit/helpers/tools"
 	"github.com/mitstack-eu/k3s-cluster-kit/testutil"
 )
 
@@ -34,11 +35,12 @@ func renderFixture(t *testing.T) (string, testutil.CloudConfig) {
 
 func TestPinnedVersions_AreTheReviewedPins(t *testing.T) {
 	want := Versions{
-		K3sVersion:         "v1.36.3+k3s1",
-		K3sSHA256:          "2f98a9f8fe5782479ee2d54e70a1b10a7f6fd4cae8d38ed3098452dc6eed76b5",
-		K3sInstallerCommit: "2d0f82fa2f933cd227fe38e1482558ce4769f464",
-		K3sInstallerSHA256: "ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b",
-		CiliumVersion:      "1.19.3",
+		K3sVersion: "v1.36.3+k3s1",
+		K3sSHA256:  "2f98a9f8fe5782479ee2d54e70a1b10a7f6fd4cae8d38ed3098452dc6eed76b5",
+		// The image's /opt/k3s is the release binary, and SUSE's registry serves it with no Docker Hub pull limit.
+		K3sImage:      "registry.rancher.com/rancher/k3s-upgrade:v1.36.3-k3s1@sha256:2444dd12ac03486408b99d059ed04383b78f4b536f1cba8d55a7e753aac4f962",
+		K3sInstaller:  tools.K3sInstaller,
+		CiliumVersion: "1.19.3",
 		// argo-cd chart 10.9.7 runs Argo CD v3.5.4, the first v3.5 release patched against GHSA-j6cw-g6p4-7hch.
 		ArgoCDChartVersion: "10.9.7",
 		// kured chart 6.1.0 runs kured 1.23.0.
@@ -187,9 +189,7 @@ func TestRenderUserData_ArgoCDBootstrapInstallsTheChartWithNoCredential(t *testi
 	for i, d := range docs {
 		assertNoCredentialKeys(t, fmt.Sprintf("00-argocd-bootstrap.yaml[%d]", i), d)
 	}
-	// notifications.secret is the chart's switch that stops it creating
-	// argocd-notifications-secret, pinned to create: false above, so it is the
-	// one secret-named key the walk leaves out.
+	// notifications.secret, pinned to create: false above, is the one secret-named key the walk leaves out.
 	walked := maps.Clone(values)
 	if n, ok := values["notifications"].(map[string]any); ok {
 		n = maps.Clone(n)
@@ -234,21 +234,15 @@ func assertRootScript(t *testing.T, what string, f testutil.CloudFile) {
 	testutil.FailIf(t, f.Owner != "" && f.Owner != "root" && f.Owner != "root:root", "%s %s owner = %q, want root", what, f.Path, f.Owner)
 }
 
-func TestRenderUserData_VerifiedInstallerPinsTheInstallerAndBinaryDigestsAndLeavesStartingK3sToTheChain(t *testing.T) {
+func TestRenderUserData_VerifiedInstallerPinsTheInstallerAndBinaryDigestsRunsBlockKitsCopyHelperAndLeavesStartingK3sToTheChain(t *testing.T) {
 	_, cc := renderFixture(t)
 	body := cc.Installer(t).Content
 	v := PinnedVersions
 
-	for _, needle := range []string{
-		"https://raw.githubusercontent.com/k3s-io/k3s/" + v.K3sInstallerCommit + "/install.sh",
-		"https://github.com/k3s-io/k3s/releases/download/v1.36.3%2Bk3s1/k3s",
-		v.K3sInstallerSHA256,
-		v.K3sSHA256,
-		"sha256sum",
-		"/usr/local/bin/k3s",
-	} {
+	for _, needle := range []string{v.K3sImage, "/opt/k3s", v.K3sSHA256, v.K3sInstaller.Image, v.K3sInstaller.Path, v.K3sInstaller.SHA256, "sha256sum", "/usr/local/bin/k3s"} {
 		testutil.FailIf(t, !strings.Contains(body, needle), "the verified installer does not contain %q", needle)
 	}
+	testutil.FailIf(t, strings.Contains(body, "://"), "the verified installer names a URL, want each artifact copied from an image by digest:\n%s", body)
 	for _, env := range []string{
 		`INSTALL_K3S_SKIP_DOWNLOAD=["']?true["']?`,
 		`INSTALL_K3S_VERSION=["']?v1\.36\.3\+k3s1["']?`,
@@ -258,6 +252,9 @@ func TestRenderUserData_VerifiedInstallerPinsTheInstallerAndBinaryDigestsAndLeav
 		testutil.FailIf(t, !regexp.MustCompile(env).MatchString(body), "the verified installer does not run install.sh with %s", env)
 	}
 	testutil.FailIf(t, strings.Contains(body, "get.k3s.io"), "the verified installer fetches the unpinned get.k3s.io script")
+	helper := cc.File(t, copyToolPath)
+	assertRootScript(t, "the copy helper", helper)
+	testutil.FailIf(t, helper.Content != stripCommentAndBlankLines(tools.CopyScript), "the user data's %s differs from block-kit's tools.CopyScript without its comment and blank lines", copyToolPath)
 }
 
 func TestRenderUserData_EveryVersionInputReachesTheDocument(t *testing.T) {
@@ -266,12 +263,11 @@ func TestRenderUserData_EveryVersionInputReachesTheDocument(t *testing.T) {
 	in.Versions = Versions{
 		K3sVersion:         "v1.37.1+k3s1",
 		K3sSHA256:          strings.Repeat("a", 64),
-		K3sInstallerCommit: strings.Repeat("b", 40),
-		K3sInstallerSHA256: strings.Repeat("c", 64),
+		K3sImage:           "registry.rancher.com/rancher/k3s-upgrade:v1.37.1-k3s1@sha256:" + strings.Repeat("b", 64),
+		K3sInstaller:       tools.File{Image: "ghcr.io/mitstack-eu/block-kit-tools:v0.46.0@sha256:" + strings.Repeat("d", 64), Path: "/k3s/install.sh", SHA256: strings.Repeat("c", 64)},
 		CiliumVersion:      "1.20.0",
 		ArgoCDChartVersion: "11.0.0",
-		// These five reach the cluster repository's seed, not the user data;
-		// clusterseed_test.go follows them there.
+		// These five reach the cluster repository's seed, which clusterseed_test.go follows.
 		KuredChartVersion:              "6.2.0",
 		SystemUpgradeControllerVersion: "v0.21.0",
 		TraefikChartVersion:            "41.7.0",
@@ -281,12 +277,7 @@ func TestRenderUserData_EveryVersionInputReachesTheDocument(t *testing.T) {
 	_, cc := renderCC(t, in)
 
 	installer := cc.Installer(t).Content
-	for _, needle := range []string{
-		"https://github.com/k3s-io/k3s/releases/download/v1.37.1%2Bk3s1/k3s",
-		strings.Repeat("a", 64),
-		"https://raw.githubusercontent.com/k3s-io/k3s/" + strings.Repeat("b", 40) + "/install.sh",
-		strings.Repeat("c", 64),
-	} {
+	for _, needle := range []string{in.Versions.K3sImage, strings.Repeat("a", 64), in.Versions.K3sInstaller.Image, strings.Repeat("c", 64)} {
 		testutil.FailIf(t, !strings.Contains(installer, needle), "the installer rendered with changed versions does not contain %q", needle)
 	}
 	if !regexp.MustCompile(`INSTALL_K3S_VERSION=["']?v1\.37\.1\+k3s1["']?`).MatchString(installer) {
@@ -321,8 +312,7 @@ func TestRenderUserData_CarriesNoCredentialButTheEnrolmentToken(t *testing.T) {
 	testutil.FailIf(t, strings.Contains(cc.RuncmdText(), testutil.FixtureEnrolmentToken), "runcmd carries the enrolment token")
 }
 
-// keptOnTheHost is every file ADR 0087 keeps in the user data: node naming, the k3s install, the metadata guard,
-// enrolment and the host's own patching settings.
+// keptOnTheHost is every file ADR 0087 keeps in the user data, for naming, install, guard, enrolment and patching.
 var keptOnTheHost = []string{
 	"/etc/rancher/k3s/config.yaml",
 	"/var/lib/rancher/k3s/server/manifests/cilium.yaml",
@@ -333,6 +323,7 @@ var keptOnTheHost = []string{
 	"/usr/local/sbin/mitstack-hcloud-node",
 	"/usr/local/sbin/mitstack-enrol",
 	"/usr/local/sbin/mitstack-install-k3s",
+	copyToolPath,
 	"/etc/systemd/system/mitstack-enrol.service",
 	"/etc/systemd/system/k3s.service.d/10-mitstack-enrolment.conf",
 	"/etc/systemd/system/mitstack-metadata-guard.service",
@@ -350,6 +341,19 @@ func TestRenderUserData_WritesOnlyTheFilesTheDecisionRecordKeepsOnTheHost(t *tes
 	}
 
 	testutil.FailIf(t, !slices.Equal(slices.Sorted(slices.Values(paths)), slices.Sorted(slices.Values(keptOnTheHost))), "the user data writes %q\nwant only %q", paths, keptOnTheHost)
+}
+
+// A dedicated server's document reaches it over SSH or compressed inside another document, so the render leaves the size to the sender.
+func TestCheckUserDataSize_RefusesADocumentOverHetznersLimitThatRenderUserDataRenders(t *testing.T) {
+	in := hostsPlatformRenderInputs()
+	in.HostsPlatform.Recipient = "-----BEGIN PGP PUBLIC KEY BLOCK-----\n" + bootFixture("sealed-secrets.key") + bootFixture("github-app-key.sealed.yaml") + bootFixture("github-app.pem")
+	ud := renderOK(t, in)
+
+	err := CheckUserDataSize(ud)
+
+	testutil.FailIf(t, err == nil || !strings.Contains(err.Error(), strconv.Itoa(len(ud))+" bytes"), "CheckUserDataSize of a %d-byte document error = %v, want a refusal naming its size", len(ud), err)
+	_, err = UserDataDocument(CloudInitConfig{RunCmd: []string{ud}})
+	testutil.FailIf(t, err == nil, "UserDataDocument holding a %d-byte command error = nil, want Hetzner's limit", len(ud))
 }
 
 func TestRenderUserData_TheLongestRenderingIsAtMost19000Bytes(t *testing.T) {
@@ -637,13 +641,10 @@ func longestRenderInputs() UserDataInputs {
 
 const (
 
-	// autoUpgradeUnits are the units that patch the OS, which the chain
-	// enables and the report asks systemctl is-enabled about.
+	// autoUpgradeUnits patch the OS; the chain enables them and the report asks systemctl is-enabled.
 	autoUpgradeUnits  = "unattended-upgrades.service apt-daily.timer apt-daily-upgrade.timer"
 	autoUpgradeEnable = "systemctl enable --now " + autoUpgradeUnits
-	// aptDailyRefreshNow refreshes the package lists once at first boot,
-	// without waiting for it, so a fresh node's lists are current within
-	// minutes rather than at apt-daily.timer's next randomised run.
+	// aptDailyRefreshNow refreshes the lists at first boot, before apt-daily.timer's randomised run.
 	aptDailyRefreshNow = "systemctl start --no-block apt-daily.service"
 
 	aptDailyUpgradeDropIn   = systemdDir + "/apt-daily-upgrade.timer.d/10-mitstack-maintenance-window.conf"
@@ -668,8 +669,7 @@ func TestRenderUserData_UnattendedUpgradesTakesTheUpdatesPocketAndNeverRebootsIt
 	f := cc.File(t, unattendedUpgradesConf)
 	testutil.FailIf(t, f.Permissions != "0644", "%s permissions = %q, want 0644", unattendedUpgradesConf, f.Permissions)
 	conf := aptConfStatements(f.Content)
-	// An origin such as ${distro_id} holds braces inside its quotes, so the
-	// block's body skips over quoted strings whole.
+	// An origin such as ${distro_id} holds braces inside its quotes, so the body skips quoted strings whole.
 	origins := regexp.MustCompile(`(?s)Unattended-Upgrade::Allowed-Origins\s*\{((?:[^}"]|"[^"]*")*)\}\s*;`).FindAllStringSubmatch(conf, -1)
 	var listed []string
 	for _, m := range origins {
@@ -721,7 +721,7 @@ func TestRenderUserData_BothCopiesOfTheArgoCDValuesAssessEachChildApplicationsHe
 	})
 }
 
-func TestRenderUserData_RefusesAKuredOrUpgradeControllerPinOutOfShape(t *testing.T) {
+func TestRenderUserData_RefusesAPinOutOfShape(t *testing.T) {
 	for _, tc := range []struct {
 		name, field string
 		mutate      func(*Versions)
@@ -733,6 +733,12 @@ func TestRenderUserData_RefusesAKuredOrUpgradeControllerPinOutOfShape(t *testing
 		{"a system-upgrade-controller version carrying a shell command", "SystemUpgradeControllerVersion", func(v *Versions) { v.SystemUpgradeControllerVersion = "v0.20.2; reboot" }},
 		{"a system-upgrade-controller version that is a branch name", "SystemUpgradeControllerVersion", func(v *Versions) { v.SystemUpgradeControllerVersion = "master" }},
 		{"a system-upgrade-controller version without the v prefix", "SystemUpgradeControllerVersion", func(v *Versions) { v.SystemUpgradeControllerVersion = "0.20.2" }},
+		{"a k3s image named by tag alone", "K3sImage", func(v *Versions) { v.K3sImage = "registry.rancher.com/rancher/k3s-upgrade:v1.36.3-k3s1" }},
+		{"a k3s image carrying a quote", "K3sImage", func(v *Versions) { v.K3sImage = "registry.rancher.com/rancher/k3s'@sha256:" + strings.Repeat("a", 64) }},
+		{"a k3s image on a host the copy helper refuses", "K3sImage", func(v *Versions) { v.K3sImage = "rancher/k3s-upgrade@sha256:" + strings.Repeat("a", 64) }},
+		{"an installer image carrying a space", "K3sInstaller.Image", func(v *Versions) { v.K3sInstaller.Image = "ghcr.io/a b@sha256:" + strings.Repeat("a", 64) }},
+		{"an installer path carrying a quote", "K3sInstaller.Path", func(v *Versions) { v.K3sInstaller.Path = "/k3s/install.sh'" }},
+		{"an installer sha256 carrying a quote", "K3sInstaller.SHA256", func(v *Versions) { v.K3sInstaller.SHA256 = strings.Repeat("a", 63) + "'" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			in := fixtureRenderInputs()
@@ -740,7 +746,7 @@ func TestRenderUserData_RefusesAKuredOrUpgradeControllerPinOutOfShape(t *testing
 
 			_, err := RenderUserData(in)
 
-			value := reflect.ValueOf(in.Versions).FieldByName(tc.field).String()
+			value := fmt.Sprintf("%+v", reflect.ValueOf(in.Versions).FieldByName(strings.Split(tc.field, ".")[0]))
 			testutil.FatalIf(t, err == nil, "RenderUserData rendered with %s = %q, want a refusal", tc.field, value)
 			testutil.FailIf(t, !strings.Contains(err.Error(), tc.field), "RenderUserData refused %s = %q with %q, want the error to name %s", tc.field, value, err, tc.field)
 		})

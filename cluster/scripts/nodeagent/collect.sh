@@ -2,8 +2,8 @@
 # Collects the node report's host evidence and writes it to stdout as a tar
 # archive, runs the patch check once its result is an hour old, and starts the
 # security scan.
-# Usage: sh -c "$(cat collect.sh)" collect <patch check script> <scan script>,
-# run by mitstack-host in the host's namespaces.
+# Usage: sh -c "$(cat collect.sh)" collect <patch check script> <scan script>
+# <image scan tools directory>, run by mitstack-host in the host's namespaces.
 # It exists because these reads need host root, the admin kubeconfig or the
 # host's own tools, which no service account grants.
 set -eu
@@ -27,6 +27,7 @@ json_file=$enrolment_dir/enrolment.json
 reuse_file=$enrolment_dir/enrolment-reuse.json
 patch_check=$1
 scan=$2
+image_tools=$3
 
 fail() {
   echo "mitstack-collect: $*" >&2
@@ -98,11 +99,26 @@ if [ -z "$(find "$state_dir/patch-check.json" -mmin -60 2> /dev/null)" ]; then
   sh "$state_dir/patch-check.sh" > /dev/null 2>&1 || :
 fi
 [ ! -x "$dedicated_probe" ] || "$dedicated_probe" > /dev/null 2>&1 || :
-# The scan runs detached, since it takes minutes, and systemd refuses a second
-# mitstack-scan unit while one runs.
+# start_scan copies the image's scan tools onto the host once for each scan
+# script, which pins them, since the detached scan outlives this view of the
+# image. The scan runs detached, since it takes minutes, and systemd refuses a
+# second mitstack-scan unit while one runs, whose copy is left as it reads it.
+start_scan() {
+  copy=$state_dir/scan-tools/image
+  key=$(printf '%s\n' "$scan" | sha256sum)
+  if [ "$(cat "$copy/.scan-sha256" 2> /dev/null)" != "$key" ] &&
+    ! "$systemctl" is-active --quiet mitstack-scan.service > /dev/null 2>&1; then
+    rm -rf "$copy" "$copy.partial" &&
+      mkdir -p "$state_dir/scan-tools" &&
+      cp -R "$image_tools" "$copy.partial" &&
+      printf '%s\n' "$key" > "$copy.partial/.scan-sha256" &&
+      mv "$copy.partial" "$copy" || return
+  fi
+  "$systemd_run" --no-block --collect --unit=mitstack-scan -p RuntimeMaxSec=3h \
+    python3 -I "$state_dir/scan.py"
+}
 printf '%s\n' "$scan" > "$state_dir/scan.py"
-run scan "$systemd_run" --no-block --collect --unit=mitstack-scan -p RuntimeMaxSec=3h \
-  python3 -I "$state_dir/scan.py"
+run scan start_scan
 
 if [ ! -e "$reuse_file" ] &&
   curl -fs --connect-timeout 2 --max-time 5 -o "$work_dir/user-data" "$userdata_url"; then

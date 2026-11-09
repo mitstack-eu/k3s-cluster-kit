@@ -1,7 +1,6 @@
 package cluster
 
-// openbaoscript_test.go runs mitstack-openbao, as the node agent's image carries it, with the real python3, gpg and
-// openssl against a fake OpenBao served over TLS and a fake GitHub.
+// openbaoscript_test.go runs the image's mitstack-openbao with the real python3, gpg and openssl against a fake OpenBao and GitHub.
 
 import (
 	"bytes"
@@ -436,8 +435,7 @@ func TestOpenBaoInit_GivesEachSliceNamespaceItsOwnAppsPathAndTheAppSecretsWriter
 	}
 }
 
-// kubeletSecretVolume lays a Secret out as the kubelet mounts it: the keys in a timestamped directory that ..data
-// links to, and each key a link through ..data.
+// kubeletSecretVolume lays a Secret out as the kubelet mounts it, each key a link through ..data to a timestamped directory.
 type kubeletSecretVolume struct {
 	t   *testing.T
 	dir string

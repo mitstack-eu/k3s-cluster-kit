@@ -4,9 +4,9 @@ package cluster
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,8 +22,7 @@ const (
 	scanKubeBenchEnv  = "MITSTACK_KUBE_BENCH"
 	scanKubescapeEnv  = "MITSTACK_KUBESCAPE"
 	scanKubeconfigEnv = "MITSTACK_KUBECONFIG"
-	scanURLEnv        = "MITSTACK_SCAN_URL"
-	scanRawURLEnv     = "MITSTACK_SCAN_RAW_URL"
+	scanToolsEnv      = "MITSTACK_SCAN_TOOLS"
 
 	kubeBenchSummaryFile = "kube-bench.json"
 	kubescapeSummaryFile = "kubescape.json"
@@ -32,6 +31,8 @@ const (
 	scanResourcesLimit   = 4000
 	scanErrorLimit       = 1000
 	pinnedProfile        = "k3s-cis-1.11"
+	pinnedKubeBench      = "sha256:eef60e293d0cb7ed78c7fd5121d6b49e035431fe69db314abcff798ffabdb50a"
+	pinnedKubescape      = "sha256:011569dbcde85afc96cf63262e4f967166b6680fd70a623e9065334b6767b244"
 	scanRunBound         = 60 * time.Second
 )
 
@@ -125,10 +126,11 @@ func (r *scanRig) run() *scanRig {
 	t := r.t
 	t.Helper()
 	k := newFakeK3s(t, r.k3sOpts...)
+	// A closed proxy fails any download, so a scan that ran downloaded nothing.
 	env := append([]string{"PATH=" + os.Getenv("PATH"), "HOME=" + t.TempDir(), "TMPDIR=" + t.TempDir(),
 		testutil.ReportStateDirEnv + "=" + r.state, testutil.ReportK3sEnv + "=" + k.path, scanKubeconfigEnv + "=" + filepath.Join(t.TempDir(), "k3s.yaml"),
 		scanKubeBenchEnv + "=" + r.kubeBench.Path, scanKubescapeEnv + "=" + filepath.Join(r.kubescape, "kubescape"),
-		scanURLEnv + "=" + closedHTTPURL(t) + "/", scanRawURLEnv + "=" + closedHTTPURL(t) + "/"}, r.env...)
+		"http_proxy=http://" + closedAddr(t), "https_proxy=http://" + closedAddr(t)}, r.env...)
 	script := testutil.WriteTemp(t, "mitstack-scan.py", testutil.TestRepoFile(t, "scripts/mitstack-scan.py"))
 	cmd := exec.Command("python3", "-I", script)
 	cmd.Env = env
@@ -412,25 +414,57 @@ func TestScanScript_AToolThatFailsIsKeptAsAnErrorWithItsStderr(t *testing.T) {
 	testutil.FailIf(t, bench.Failed != nil || scape.Failed != nil, "a failed run lists failed checks")
 }
 
-func TestScanScript_ADownloadWithAnotherDigestIsNeverRun(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("not the pinned release\n")) }))
-	t.Cleanup(srv.Close)
-	r := newScanRig(t).withEnv(scanURLEnv+"="+srv.URL+"/", scanRawURLEnv+"="+srv.URL+"/", scanKubeBenchEnv+"=", scanKubescapeEnv+"=")
-	r.run()
-	testutil.FatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
-
-	for _, c := range []struct{ file, pinned string }{
-		{kubeBenchSummaryFile, "sha256:82dbc7e598740dc9344d41f8ad0b8210d57c4c00bdb2c5f1d8a69a2b98baddcf"},
-		{kubescapeSummaryFile, "sha256:011569dbcde85afc96cf63262e4f967166b6680fd70a623e9065334b6767b244"},
+func TestScanScript_AHostCopyOfAnotherDigestIsNeverRunAndIsRemoved(t *testing.T) {
+	for _, c := range []struct{ tool, summary, pinned, unset string }{
+		{"kube-bench", kubeBenchSummaryFile, pinnedKubeBench, scanKubeBenchEnv},
+		{"kubescape", kubescapeSummaryFile, pinnedKubescape, scanKubescapeEnv},
 	} {
-		raw, ok := r.summaryFile(c.file)
-		testutil.FatalIf(t, !ok, "the scan kept no %s", c.file)
-		testutil.FailIf(t, !strings.Contains(raw, "want "+c.pinned), "%s is %s, want an error naming the pinned digest %s", c.file, testutil.Truncate(raw, 300), c.pinned)
+		t.Run(c.tool, func(t *testing.T) {
+			r := newScanRig(t).withEnv(c.unset + "=")
+			copied, ran := filepath.Join(r.state, "scan-tools", "image"), filepath.Join(t.TempDir(), "ran")
+			fake := "#!/bin/sh\ntouch " + testutil.ShellQuote(ran) + "\n"
+			testutil.FatalIf(t, os.MkdirAll(copied, 0o700) != nil, "making the host's copy of the image's tools")
+			testutil.WriteIn(t, copied, c.tool, fake, 0o700)
+
+			r.run()
+
+			testutil.FatalIf(t, r.err != nil, "the scan script failed: %v\n%s", r.err, r.out)
+			raw, ok := r.summaryFile(c.summary)
+			testutil.FatalIf(t, !ok, "the scan kept no %s", c.summary)
+			testutil.FailIf(t, !strings.Contains(raw, "has sha256:"+testutil.SHA256Hex(fake)) || !strings.Contains(raw, "want "+c.pinned), "%s is %s, want an error naming the copy's digest and the pinned %s", c.summary, testutil.Truncate(raw, 300), c.pinned)
+			_, err := os.Stat(ran)
+			testutil.FailIf(t, err == nil, "the host's %s ran though its digest differs from the pin", c.tool)
+			_, err = os.Stat(copied)
+			testutil.FailIf(t, !errors.Is(err, fs.ErrNotExist), "the host keeps the copy of the image's tools after %s's digest did not match (%v), want it removed so the next report copies it again", c.tool, err)
+		})
 	}
-	entries, err := os.ReadDir(filepath.Join(r.state, "scan-tools"))
-	testutil.FatalIf(t, err != nil, "reading the tools directory: %v", err)
-	for _, e := range entries {
-		testutil.FailIf(t, e.IsDir() && !strings.HasPrefix(e.Name(), "."), "the tools directory keeps %s after its digest did not match", e.Name())
+}
+
+func TestScanScript_RemovesEveryDigestNamedToolSetFromTheHost(t *testing.T) {
+	r := newScanRig(t)
+	for _, name := range []string{strings.Repeat("a", 64), strings.Repeat("b", 64) + ".partial"} {
+		testutil.FatalIf(t, os.MkdirAll(filepath.Join(r.state, "scan-tools", name, "k3s-cis-1.11"), 0o700) != nil, "making the host's set %s", name)
+	}
+
+	r.run()
+
+	entries, _ := os.ReadDir(filepath.Join(r.state, "scan-tools"))
+	testutil.FailIf(t, len(entries) != 0, "the host keeps %v in scan-tools, want every digest-named set removed, since no scan runs one", entries)
+}
+
+func TestScanScript_CheckFailsNamingEachToolTheImageCarriesAtAnotherDigest(t *testing.T) {
+	tools := t.TempDir()
+	testutil.WriteIn(t, tools, "kube-bench", "not the pinned build\n", 0o700)
+	script := testutil.WriteTemp(t, "mitstack-scan.py", testutil.TestRepoFile(t, "scripts/mitstack-scan.py"))
+	cmd := exec.Command("python3", "-I", script, "check")
+	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), scanToolsEnv + "=" + tools, testutil.ReportStateDirEnv + "=" + t.TempDir()}
+
+	out, err := cmd.CombinedOutput()
+
+	testutil.FailIf(t, err == nil, "the check over a kube-bench of another digest and no kubescape succeeded:\n%s", out)
+	for _, want := range []string{"has sha256:" + testutil.SHA256Hex("not the pinned build\n") + ", want " + pinnedKubeBench, filepath.Join(tools, "kubescape"),
+		filepath.Join(tools, "kube-bench-cfg", "config.yaml"), filepath.Join(tools, "nsa-framework", "nsa")} {
+		testutil.FailIf(t, !strings.Contains(string(out), want), "the check printed %q, want it to name %q", out, want)
 	}
 }
 

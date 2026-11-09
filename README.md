@@ -47,7 +47,7 @@ auto-deploy directory, so the cluster comes up while the platform is down.
 
 | Part | Files | What they hold |
 |---|---|---|
-| The render | `cluster/render.go`, `cluster/scripts.go` | The cloud-config document, the k3s server config, the bootstrap Cilium and Argo CD charts, and the node scripts it embeds from `cluster/scripts/` |
+| The render | `cluster/render.go`, `cluster/scripts.go` | The cloud-config document, the k3s server config, the bootstrap Cilium and Argo CD charts, the node scripts it embeds from `cluster/scripts/`, and block-kit's copy helper, which the k3s installer runs |
 | The cluster seed | `cluster/clusterseed.go`, `cluster/cloudnativepg.go`, `cluster/localpvlvm.go` | The Argo CD Applications and objects a cluster repository starts with, and the components copied from a release of mitstack-eu/cluster-bases, the repository of pinned third-party manifests, into `cluster/clusterbases/` |
 | The boot components | `cluster/bootcomponents.go`, `cluster/bootsecrets.go` | What a cluster that hosts the platform starts before Argo CD runs, the Sealed Secrets key pair it boots with, and the Job that initialises OpenBao |
 | The node agent | `cluster/scripts/nodeagent/` | The image that runs the node report, the repository-token refresh, the patch check and OpenBao's init, its manifest, and the digest of the signed image the seed pins |
@@ -61,7 +61,7 @@ module wherever it renders or hardens a node. In hcloud-k3s-cluster:
 
 | Block function | File | What it takes from the module |
 |---|---|---|
-| `createServer` | `resource.go` | `RenderUserData` and `UserDataInputs` for a Cloud server |
+| `createServer` | `resource.go` | `RenderUserData` and `UserDataInputs` for a Cloud server, and `CheckUserDataSize` before Hetzner creates it |
 | `provisionServer` | `resource.go` | `RenderSeed` for the new cluster repository |
 | `pins` | `resource.go` | `Versions` and `PinnedVersions`, unless a test sets its own |
 | `ensureLoadBalancer`, `reachProblems`, `clusterFirewall` | `resource.go`, `observe.go`, `dedicated.go` | `LoadBalancerPrivateIP`, `HTTPNodePort` and `HTTPSNodePort`, the address and ports Traefik's seeded values name |
