@@ -450,7 +450,8 @@ func TestScanScript_CheckFailsNamingEachToolTheImageCarriesAtAnotherDigest(t *te
 	out, err := cmd.CombinedOutput()
 
 	testutil.FailIf(t, err == nil, "the check over a kube-bench of another digest and no kubescape succeeded:\n%s", out)
-	for _, want := range []string{"has sha256:" + testutil.SHA256Hex("not the pinned build\n") + ", want " + pinnedKubeBench, filepath.Join(tools, "kubescape")} {
+	for _, want := range []string{"has sha256:" + testutil.SHA256Hex("not the pinned build\n") + ", want " + pinnedKubeBench, filepath.Join(tools, "kubescape"),
+		filepath.Join(tools, "kube-bench-cfg", "config.yaml"), filepath.Join(tools, "nsa-framework", "nsa")} {
 		testutil.FailIf(t, !strings.Contains(string(out), want), "the check printed %q, want it to name %q", out, want)
 	}
 }

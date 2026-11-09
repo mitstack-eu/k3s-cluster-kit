@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mitstack-eu/block-kit/helpers/tools"
 	"github.com/mitstack-eu/k3s-cluster-kit/testutil"
 )
 
@@ -34,11 +35,12 @@ func renderFixture(t *testing.T) (string, testutil.CloudConfig) {
 
 func TestPinnedVersions_AreTheReviewedPins(t *testing.T) {
 	want := Versions{
-		K3sVersion:         "v1.36.3+k3s1",
-		K3sSHA256:          "2f98a9f8fe5782479ee2d54e70a1b10a7f6fd4cae8d38ed3098452dc6eed76b5",
-		K3sInstallerCommit: "2d0f82fa2f933cd227fe38e1482558ce4769f464",
-		K3sInstallerSHA256: "ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b",
-		CiliumVersion:      "1.19.3",
+		K3sVersion: "v1.36.3+k3s1",
+		K3sSHA256:  "2f98a9f8fe5782479ee2d54e70a1b10a7f6fd4cae8d38ed3098452dc6eed76b5",
+		// The image's /opt/k3s is the release binary, and SUSE's registry serves it with no Docker Hub pull limit.
+		K3sImage:      "registry.rancher.com/rancher/k3s-upgrade:v1.36.3-k3s1@sha256:2444dd12ac03486408b99d059ed04383b78f4b536f1cba8d55a7e753aac4f962",
+		K3sInstaller:  tools.K3sInstaller,
+		CiliumVersion: "1.19.3",
 		// argo-cd chart 10.9.7 runs Argo CD v3.5.4, the first v3.5 release patched against GHSA-j6cw-g6p4-7hch.
 		ArgoCDChartVersion: "10.9.7",
 		// kured chart 6.1.0 runs kured 1.23.0.
@@ -239,16 +241,10 @@ func TestRenderUserData_VerifiedInstallerPinsTheInstallerAndBinaryDigestsAndLeav
 	body := cc.Installer(t).Content
 	v := PinnedVersions
 
-	for _, needle := range []string{
-		"https://raw.githubusercontent.com/k3s-io/k3s/" + v.K3sInstallerCommit + "/install.sh",
-		"https://github.com/k3s-io/k3s/releases/download/v1.36.3%2Bk3s1/k3s",
-		v.K3sInstallerSHA256,
-		v.K3sSHA256,
-		"sha256sum",
-		"/usr/local/bin/k3s",
-	} {
+	for _, needle := range []string{v.K3sImage, "/opt/k3s", v.K3sSHA256, v.K3sInstaller.Image, v.K3sInstaller.Path, v.K3sInstaller.SHA256, "sha256sum", "/usr/local/bin/k3s"} {
 		testutil.FailIf(t, !strings.Contains(body, needle), "the verified installer does not contain %q", needle)
 	}
+	testutil.FailIf(t, strings.Contains(body, "://"), "the verified installer names a URL, want each artifact copied from an image by digest:\n%s", body)
 	for _, env := range []string{
 		`INSTALL_K3S_SKIP_DOWNLOAD=["']?true["']?`,
 		`INSTALL_K3S_VERSION=["']?v1\.36\.3\+k3s1["']?`,
@@ -266,8 +262,8 @@ func TestRenderUserData_EveryVersionInputReachesTheDocument(t *testing.T) {
 	in.Versions = Versions{
 		K3sVersion:         "v1.37.1+k3s1",
 		K3sSHA256:          strings.Repeat("a", 64),
-		K3sInstallerCommit: strings.Repeat("b", 40),
-		K3sInstallerSHA256: strings.Repeat("c", 64),
+		K3sImage:           "registry.rancher.com/rancher/k3s-upgrade:v1.37.1-k3s1@sha256:" + strings.Repeat("b", 64),
+		K3sInstaller:       tools.File{Image: "ghcr.io/mitstack-eu/block-kit-tools:v0.46.0@sha256:" + strings.Repeat("d", 64), Path: "/k3s/install.sh", SHA256: strings.Repeat("c", 64)},
 		CiliumVersion:      "1.20.0",
 		ArgoCDChartVersion: "11.0.0",
 		// These five reach the cluster repository's seed, not the user data;
@@ -281,12 +277,7 @@ func TestRenderUserData_EveryVersionInputReachesTheDocument(t *testing.T) {
 	_, cc := renderCC(t, in)
 
 	installer := cc.Installer(t).Content
-	for _, needle := range []string{
-		"https://github.com/k3s-io/k3s/releases/download/v1.37.1%2Bk3s1/k3s",
-		strings.Repeat("a", 64),
-		"https://raw.githubusercontent.com/k3s-io/k3s/" + strings.Repeat("b", 40) + "/install.sh",
-		strings.Repeat("c", 64),
-	} {
+	for _, needle := range []string{in.Versions.K3sImage, strings.Repeat("a", 64), in.Versions.K3sInstaller.Image, strings.Repeat("c", 64)} {
 		testutil.FailIf(t, !strings.Contains(installer, needle), "the installer rendered with changed versions does not contain %q", needle)
 	}
 	if !regexp.MustCompile(`INSTALL_K3S_VERSION=["']?v1\.37\.1\+k3s1["']?`).MatchString(installer) {
@@ -333,6 +324,7 @@ var keptOnTheHost = []string{
 	"/usr/local/sbin/mitstack-hcloud-node",
 	"/usr/local/sbin/mitstack-enrol",
 	"/usr/local/sbin/mitstack-install-k3s",
+	copyToolPath,
 	"/etc/systemd/system/mitstack-enrol.service",
 	"/etc/systemd/system/k3s.service.d/10-mitstack-enrolment.conf",
 	"/etc/systemd/system/mitstack-metadata-guard.service",
@@ -350,6 +342,15 @@ func TestRenderUserData_WritesOnlyTheFilesTheDecisionRecordKeepsOnTheHost(t *tes
 	}
 
 	testutil.FailIf(t, !slices.Equal(slices.Sorted(slices.Values(paths)), slices.Sorted(slices.Values(keptOnTheHost))), "the user data writes %q\nwant only %q", paths, keptOnTheHost)
+}
+
+func TestRenderUserData_TheCopyHelperIsBlockKitsWithoutItsComments(t *testing.T) {
+	_, cc := renderFixture(t)
+
+	helper := cc.File(t, copyToolPath)
+
+	assertRootScript(t, "the copy helper", helper)
+	testutil.FailIf(t, helper.Content != stripCommentAndBlankLines(tools.CopyScript), "the user data's %s differs from block-kit's tools.CopyScript without its comment and blank lines", copyToolPath)
 }
 
 func TestRenderUserData_TheLongestRenderingIsAtMost19000Bytes(t *testing.T) {
