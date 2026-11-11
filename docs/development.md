@@ -141,7 +141,7 @@ directory.
 
 | Job | What it proves |
 |---|---|
-| `test` | `go vet ./...` and `go test -race ./...` pass |
+| `test` | On a pull request, `checkpolls`, the check that block-kit, the shared kit every block builds on, ships for added sleeps and polling intervals, judges every line the change adds against its base commit and fails a `time.Sleep`, a ticker or a shell `sleep`, naming each file and line. It runs as a tool of the `ci` module, a Go module of its own under `ci/`. Its `ci/go.mod` alone names the check's block-kit release, because the kit's own `go.mod` sets the tools image its recorded user data names. A human reviewer judges the waits `checkpolls -help` says the check cannot see, such as a timer reset inside a loop or a `time.After` in a select. `go vet ./...` and `go test -race ./...` then pass |
 | `kyverno-test` | Each admission policy gives its accepted and refused fixtures the expected result |
 | `localpv-lvm` | A dedicated seed's LocalPV-LVM binds a claim on a real k3s node |
 | `openbao-boot` | The recorded user data of a cluster that hosts the platform initialises OpenBao and writes the GitHub App's key into it |
