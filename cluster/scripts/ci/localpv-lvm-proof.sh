@@ -150,3 +150,4 @@ volumes=$(lvs --noheadings -o lv_name vg0 | tr -d ' ' | grep -c . || true)
 [ "$volumes" -eq 1 ] || fail "vg0 holds ${volumes} logical volumes, want only vg0/${volume} of claim fits"
 echo "localpv-lvm-proof: PASS: claim too-big stayed Pending for ${pending_seconds}s and vg0 holds no logical volume for it"
 echo "::endgroup::"
+sleep 10
