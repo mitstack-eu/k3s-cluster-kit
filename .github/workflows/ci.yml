@@ -41,12 +41,13 @@ jobs:
         with:
           go-version: '1.26.8'
 
-      # Run inside the module, Go builds the check at the block-kit release go.mod requires.
+      # The ci module's go.mod names the check's block-kit release, because the kit's own requirement sets the tools image its recorded user data names.
       - name: Fail a pull request that adds a fixed sleep or a polling interval
         if: github.event_name == 'pull_request'
+        working-directory: ci
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: go run github.com/mitstack-eu/block-kit/cmd/checkpolls -base "$BASE_SHA"
+        run: go tool checkpolls -base "$BASE_SHA"
 
       - name: go vet
         working-directory: .
