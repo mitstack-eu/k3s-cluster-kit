@@ -34,11 +34,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0 # checkpolls compares the tree with the pull request's base commit
           persist-credentials: false
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.26.8'
+
+      # Run inside the module, Go builds the check at the block-kit release go.mod requires.
+      - name: Fail a pull request that adds a fixed sleep or a polling interval
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: go run github.com/mitstack-eu/block-kit/cmd/checkpolls -base "$BASE_SHA"
 
       - name: go vet
         working-directory: .
