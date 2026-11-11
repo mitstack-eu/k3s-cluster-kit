@@ -20,7 +20,8 @@ const (
 	checkoutPin      = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 	ubicloudRunsOn   = `${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}`
 	workflowPath     = "../.github/workflows/ci.yml"
-	pollingCheckRun  = `go run github.com/mitstack-eu/block-kit/cmd/checkpolls -base "$BASE_SHA"`
+	pollingCheckRun  = `go tool checkpolls -base "$BASE_SHA"`
+	pollingCheckTool = "tool github.com/mitstack-eu/block-kit/cmd/checkpolls"
 )
 
 func TestCI_TestJobFailsAPullRequestThatAddsAFixedSleepOrAPollingIntervalAgainstItsBaseCommit(t *testing.T) {
@@ -38,17 +39,22 @@ func TestCI_TestJobFailsAPullRequestThatAddsAFixedSleepOrAPollingIntervalAgainst
 	checkout, _ := steps[0].(map[string]any)["with"].(map[string]any)
 	testutil.FailIf(t, check["if"] != "github.event_name == 'pull_request'", "the polling check runs if %#v, want on a pull request alone", check["if"])
 	testutil.FailIf(t, env["BASE_SHA"] != "${{ github.event.pull_request.base.sha }}", "the polling check compares with BASE_SHA = %#v, want the pull request's base commit", env["BASE_SHA"])
+	testutil.FailIf(t, check["working-directory"] != "ci", "the polling check runs from %#v, want the ci module, whose go.mod names its block-kit release", check["working-directory"])
 	testutil.FailIf(t, continues, "the polling check sets continue-on-error, so a failure leaves the job green")
 	testutil.FailIf(t, checkout["fetch-depth"] != 0, "the test job checks out fetch-depth %#v, want 0, so the base commit the check compares with is present", checkout["fetch-depth"])
 }
 
-func TestCI_GoModRequiresABlockKitReleaseThatHoldsThePollingCheck(t *testing.T) {
-	mod, err := os.ReadFile("../go.mod")
-	testutil.FatalIf(t, err != nil, "reading go.mod: %v", err)
+func TestCI_ThePollingCheckRunsAtTheReleaseTheCIModuleRequires(t *testing.T) {
+	ciMod, err := os.ReadFile("../ci/go.mod")
+	testutil.FatalIf(t, err != nil, "reading the ci module's go.mod: %v", err)
+	kitMod, err := os.ReadFile("../go.mod")
+	testutil.FatalIf(t, err != nil, "reading the kit's go.mod: %v", err)
 	var kit [3]int
-	_, _ = fmt.Sscanf(string(regexp.MustCompile(`mitstack-eu/block-kit v\S+`).Find(mod)), "mitstack-eu/block-kit v%d.%d.%d", &kit[0], &kit[1], &kit[2])
+	_, _ = fmt.Sscanf(string(regexp.MustCompile(`mitstack-eu/block-kit v\S+`).Find(ciMod)), "mitstack-eu/block-kit v%d.%d.%d", &kit[0], &kit[1], &kit[2])
 
-	testutil.FailIf(t, slices.Compare(kit[:], []int{0, 49, 1}) < 0, "go.mod requires block-kit v%d.%d.%d, want v0.49.1 or later, the first release that holds checkpolls", kit[0], kit[1], kit[2])
+	testutil.FailIf(t, !strings.Contains(string(ciMod), pollingCheckTool), "ci/go.mod declares no `%s`", pollingCheckTool)
+	testutil.FailIf(t, slices.Compare(kit[:], []int{0, 49, 1}) < 0, "ci/go.mod requires block-kit v%d.%d.%d, want v0.49.1 or later, the first release that holds checkpolls", kit[0], kit[1], kit[2])
+	testutil.FailIf(t, strings.Contains(string(kitMod), pollingCheckTool), "the kit's own go.mod declares the checkpolls tool, so the block-kit release that fixes the tools image in the user data would follow the check")
 }
 
 func kyvernoTestJob(t *testing.T) map[string]any {
