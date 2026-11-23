@@ -28,10 +28,10 @@ defaults:
   run:
     working-directory: cluster
 
-# Every job runs on GitHub's hosted ubuntu-latest, which is free for a public repository.
+# Every job runs on GitHub's hosted ubuntu-24.04, free for a public repository, since on Ubuntu 26.04 OpenBao is refused the signal that reloads its renewed certificate and openbao-boot fails.
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -59,7 +59,7 @@ jobs:
         run: go test -race ./...
 
   kyverno-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -80,7 +80,7 @@ jobs:
         run: kyverno test admission/tests
 
   localpv-lvm:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -90,7 +90,7 @@ jobs:
         run: sudo scripts/ci/localpv-lvm-proof.sh
 
   openbao-boot:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -100,7 +100,7 @@ jobs:
         run: sudo scripts/ci/openbao-boot-proof.sh
 
   node-agent-reads:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -112,7 +112,7 @@ jobs:
   release:
     needs: [test, kyverno-test, localpv-lvm, openbao-boot, node-agent-reads]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     concurrency:
