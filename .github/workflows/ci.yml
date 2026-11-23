@@ -93,12 +93,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-latest, ubuntu-24.04, ubicloud-standard-2]
+        runner: [ubuntu-latest, ubuntu-24.04]
+        unconfined: [as the image sets it, unrestricted]
+        exclude:
+          - runner: ubuntu-24.04
+            unconfined: unrestricted
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Lift the kernel's restriction on unconfined processes changing profile
+        if: matrix.unconfined == 'unrestricted'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
 
       - name: Prove OpenBao's init and the App key's writer on k3s
         run: sudo scripts/ci/openbao-boot-proof.sh
