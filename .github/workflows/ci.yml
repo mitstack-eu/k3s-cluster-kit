@@ -28,9 +28,10 @@ defaults:
   run:
     working-directory: cluster
 
+# Every job runs on ubuntu-24.04, the Ubuntu release the k3s block, hcloud-k3s-cluster, creates its Cloud servers from.
 jobs:
   test:
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -58,7 +59,7 @@ jobs:
         run: go test -race ./...
 
   kyverno-test:
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -79,7 +80,7 @@ jobs:
         run: kyverno test admission/tests
 
   localpv-lvm:
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,7 +90,7 @@ jobs:
         run: sudo scripts/ci/localpv-lvm-proof.sh
 
   openbao-boot:
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -99,7 +100,7 @@ jobs:
         run: sudo scripts/ci/openbao-boot-proof.sh
 
   node-agent-reads:
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -111,7 +112,7 @@ jobs:
   release:
     needs: [test, kyverno-test, localpv-lvm, openbao-boot, node-agent-reads]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     concurrency:

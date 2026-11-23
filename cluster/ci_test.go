@@ -18,7 +18,6 @@ const (
 	kyvernoCLIURL    = "https://github.com/kyverno/kyverno/releases/download/v1.19.1/kyverno-cli_v1.19.1_linux_x86_64.tar.gz"
 	kyvernoCLISHA256 = "b38228f367fc0fdc2b08f4c83ea50ac5f16c60ff8d62d76a66157c33c47b70ae"
 	checkoutPin      = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
-	ubicloudRunsOn   = `${{ fromJSON(vars.CI_RUNS_ON || '["ubicloud-standard-2"]') }}`
 	workflowPath     = "../.github/workflows/ci.yml"
 	pollingCheckRun  = `go tool checkpolls -base "$BASE_SHA"`
 	pollingCheckTool = "tool github.com/mitstack-eu/block-kit/cmd/checkpolls"
@@ -64,10 +63,11 @@ func kyvernoTestJob(t *testing.T) map[string]any {
 	return job
 }
 
-func TestCI_KyvernoTestJobRunsOnUbicloud(t *testing.T) {
-	job := kyvernoTestJob(t)
-
-	testutil.FailIf(t, job["runs-on"] != ubicloudRunsOn, "kyverno-test runs-on = %#v, want %q: Ubicloud is the only sanctioned runner", job["runs-on"], ubicloudRunsOn)
+func TestCI_EveryJobRunsOnGitHubsHostedUbuntuRunner(t *testing.T) {
+	for name, job := range testutil.CIJobs(t, workflowPath) {
+		fields, _ := job.(map[string]any)
+		testutil.FailIf(t, fields["runs-on"] != "ubuntu-24.04", "%s runs-on = %#v, want ubuntu-24.04, GitHub's free hosted runner at the Ubuntu release the k3s block's servers run", name, fields["runs-on"])
+	}
 }
 
 func TestCI_KyvernoTestJobChecksOutThePinnedActionAndRunsTheCLIAtV1191AfterCheckingItsDigest(t *testing.T) {
@@ -88,12 +88,11 @@ var k3sProofs = map[string]string{
 	"node-agent-reads": "sudo scripts/ci/node-agent-proof.sh",
 }
 
-func TestCI_EachK3sProofJobRunsItsProofAsRootOnUbicloud(t *testing.T) {
+func TestCI_EachK3sProofJobRunsItsProofAsRoot(t *testing.T) {
 	for name, script := range k3sProofs {
 		t.Run(name, func(t *testing.T) {
 			job, ok := testutil.CIJobs(t, workflowPath)[name].(map[string]any)
 			testutil.FatalIf(t, !ok, "the CI workflow has no job %s", name)
-			testutil.FailIf(t, job["runs-on"] != ubicloudRunsOn, "%s runs-on = %#v, want %q: Ubicloud is the only sanctioned runner", name, job["runs-on"], ubicloudRunsOn)
 
 			uses, runs := testutil.JobUsesAndRuns(t, name, job)
 

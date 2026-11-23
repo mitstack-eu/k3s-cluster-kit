@@ -135,9 +135,37 @@ go test -run 'TestGolden' ./...
 ## What CI runs
 
 `.github/workflows/ci.yml` runs on every pull request, every push to `main`
-and a manual run. Every job runs on the runner the repository variable
-`CI_RUNS_ON` names, `ubicloud-standard-2` by default, from the `cluster/`
-directory.
+and a manual run. Every job runs from the `cluster/` directory on
+`ubuntu-24.04`, one of GitHub's
+[standard hosted runners for public repositories](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+GitHub's
+[Actions billing page](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
+lists the use of standard hosted runners in a public repository as free.
+
+Keep `ubuntu-24.04` when you edit the workflow, because Ubuntu 24.04 is the
+release the k3s block, hcloud-k3s-cluster, creates its Cloud servers from.
+
+On 23 Nov 2026, `ubuntu-latest` resolved to `ubuntu-26.04`, and the
+`openbao-boot` proof failed in each of the four CI jobs that finished it there:
+[job 137624429610](https://github.com/mitstack-eu/k3s-cluster-kit/actions/runs/45154661692/job/137624429610),
+[job 137633098145](https://github.com/mitstack-eu/k3s-cluster-kit/actions/runs/45154661692/job/137633098145),
+[job 137645841786](https://github.com/mitstack-eu/k3s-cluster-kit/actions/runs/45160920545/job/137645841786)
+and
+[job 137654379990](https://github.com/mitstack-eu/k3s-cluster-kit/actions/runs/45163461260/job/137654379990).
+In each, the proof read the certificate OpenBao served once and then sixty more
+times, ten seconds apart. It never saw a new serial, though it sets that
+certificate to renew two minutes after each issue.
+
+The last two of those jobs ran the proof with added diagnostics for the
+`tls-reload` container. That container runs beside OpenBao, as
+`cluster/clusterbases/openbao/helmchart.yaml` sets out, and signals it to load
+a renewed certificate. In both jobs, a probe run inside the container with
+`kill -0`, which tests a signal without sending one, printed
+`signal to bao pid <n>: allowed`. The container's own log, read by the next
+diagnostic, held `sh: can't kill pid <n>: Permission denied`. What makes the
+proof fail on `ubuntu-26.04` is not established. On the same day
+the proof also failed once on `ubuntu-24.04`, at a different check, for a
+reason not yet established.
 
 | Job | What it proves |
 |---|---|
@@ -164,8 +192,9 @@ kyverno test admission/tests
 
 The seed tests prove the bytes a dedicated server's repository receives, and
 only a running node shows what those bytes do. The `localpv-lvm` job
-therefore runs `scripts/ci/localpv-lvm-proof.sh` as root on a Ubicloud
-runner, which is a disposable VM. The script does this, in order:
+therefore runs `scripts/ci/localpv-lvm-proof.sh` as root on the hosted
+runner, a virtual machine GitHub starts fresh for each job. The script does
+this, in order:
 
 1. It creates a 4G loop device and makes volume group `vg0` on it.
 2. It copies k3s `v1.36.3+k3s1`, the version the module pins, out of
@@ -187,8 +216,8 @@ claim and a `localpv-lvm-proof: PASS:` line for each.
 
 ### How CI proves OpenBao's boot on k3s
 
-The `openbao-boot` job runs `scripts/ci/openbao-boot-proof.sh` as root on a
-Ubicloud runner. It boots the manifests recorded in
+The `openbao-boot` job runs `scripts/ci/openbao-boot-proof.sh` as root on the
+hosted runner. It boots the manifests recorded in
 `testdata/golden/userdata-hosts-platform.yaml`, which `golden_test.go` holds
 to what `RenderUserData` writes, with the test-only keys in `testdata/boot/`.
 The script does this, in order:
