@@ -147,8 +147,9 @@ the k3s block, hcloud-k3s-cluster, creates its Cloud servers from.
 
 On 23 Nov 2026, `ubuntu-latest` resolved to `ubuntu-26.04`, and the
 `openbao-boot` proof failed in all three CI jobs that ran it there. In each,
-OpenBao still served its first certificate ten minutes after that certificate
-renewed. In one of them, the `tls-reload` container logged
+the proof read the certificate OpenBao served sixty times, ten seconds apart,
+and never saw a new serial, though it sets that certificate to renew two
+minutes after each issue. In one of them, the `tls-reload` container logged
 `signal to bao pid 17: allowed` and then
 `sh: can't kill pid 17: Permission denied`, and nothing yet reconciles those
 two lines. Which `ubuntu-26.04` setting causes the failure is not established.
