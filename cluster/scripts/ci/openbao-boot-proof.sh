@@ -54,7 +54,10 @@ signal_facts() {
     # shellcheck disable=SC2016
     kubectl -n openbao exec openbao-0 -c tls-reload -- sh -c 'echo "tls-reload runs as $(id)"; for p in $(pidof bao); do if kill -0 "$p"; then echo "signal to bao pid $p: allowed"; else echo "signal to bao pid $p: refused"; fi; done'
     kubectl -n openbao logs openbao-0 -c tls-reload --tail=5
-    dmesg | grep -i -E 'apparmor|audit' | tail -n 30
+    grep -E '^(PRETTY_NAME)=' /etc/os-release
+    sysctl kernel.apparmor_restrict_unprivileged_unconfined kernel.apparmor_restrict_unprivileged_userns 2>&1
+    echo "profile changes turned into stacking: $(dmesg | grep -c 'converted to stacking')"
+    dmesg | grep 'apparmor="DENIED"' | grep -o 'operation="[^"]*".*' | sed -E 's/pid=[0-9]+ //' | sort | uniq -c
     echo "::endgroup::"
     true
   )
