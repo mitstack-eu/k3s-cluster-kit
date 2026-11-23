@@ -28,6 +28,7 @@ defaults:
   run:
     working-directory: cluster
 
+# Every job runs on GitHub's hosted ubuntu-latest, which is free for a public repository.
 jobs:
   test:
     runs-on: ubuntu-latest
