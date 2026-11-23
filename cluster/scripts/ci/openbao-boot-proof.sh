@@ -38,6 +38,28 @@ fail() {
   exit 1
 }
 
+signal_facts() {
+  (
+    set +e
+    echo "::group::who may signal OpenBao"
+    uname -r
+    echo "lsm: $(cat /sys/kernel/security/lsm)"
+    echo "apparmor enabled: $(cat /sys/module/apparmor/parameters/enabled 2>&1)"
+    kubectl -n openbao get pod openbao-0 -o jsonpath='pod {.spec.securityContext}{"\n"}{range .spec.containers[*]}{.name}{" "}{.securityContext}{"\n"}{end}'
+    for pid in $(pgrep -x bao) $(pgrep -f 'tls-reload: sent SIGHUP' | head -n 1); do
+      echo "host view of pid ${pid}: $(tr '\0' ' ' < "/proc/${pid}/cmdline" | cut -c1-60)"
+      grep -E '^(Uid|Gid|CapEff|NoNewPrivs|Seccomp):' "/proc/${pid}/status"
+      echo "label: $(cat "/proc/${pid}/attr/current" 2>&1)"
+    done
+    # shellcheck disable=SC2016
+    kubectl -n openbao exec openbao-0 -c tls-reload -- sh -c 'echo "tls-reload runs as $(id)"; for p in $(pidof bao); do if kill -0 "$p"; then echo "signal to bao pid $p: allowed"; else echo "signal to bao pid $p: refused"; fi; done'
+    kubectl -n openbao logs openbao-0 -c tls-reload --tail=5
+    dmesg | grep -i -E 'apparmor|audit' | tail -n 30
+    echo "::endgroup::"
+    true
+  )
+}
+
 diagnose() {
   set +e
   echo "::group::diagnostics"
@@ -54,6 +76,7 @@ diagnose() {
   cat "$work/github.log"
   tail -n 100 /var/log/mitstack-k3s.log
   echo "::endgroup::"
+  signal_facts
 }
 
 [ "$(id -u)" -eq 0 ] || fail "run as root, since it installs k3s"
@@ -373,6 +396,9 @@ echo "::endgroup::"
 echo "::group::the serving certificate renews with no hand act, and OpenBao serves the renewed one"
 first_serial=$(served_serial) || fail "OpenBao's certificate does not verify against the authority in openbao-ca"
 echo "$(date -u +%FT%TZ) OpenBao serves ${first_serial}"
+echo "::endgroup::"
+signal_facts
+echo "::group::the wait for the renewed certificate"
 second_serial=$first_serial
 for _ in $(seq 1 60); do
   second_serial=$(served_serial || true)
@@ -388,3 +414,4 @@ status=$(kubectl -n openbao exec openbao-0 -c openbao -- bao status || true)
 grep -Eq '^Sealed[[:space:]]+false$' <<<"$status" || fail "bao status does not read Sealed false after the renewal"
 echo "openbao-boot-proof: PASS: OpenBao served ${first_serial} and then ${second_serial}, each verifying against the cluster's authority, and stayed unsealed"
 echo "::endgroup::"
+signal_facts
