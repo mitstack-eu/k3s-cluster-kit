@@ -66,7 +66,7 @@ func kyvernoTestJob(t *testing.T) map[string]any {
 func TestCI_EveryJobRunsOnGitHubsHostedUbuntuRunner(t *testing.T) {
 	for name, job := range testutil.CIJobs(t, workflowPath) {
 		fields, _ := job.(map[string]any)
-		testutil.FailIf(t, fields["runs-on"] != "ubuntu-latest", "%s runs-on = %#v, want ubuntu-latest, the hosted runner GitHub gives a public repository for free", name, fields["runs-on"])
+		testutil.FailIf(t, fields["runs-on"] != "ubuntu-24.04", "%s runs-on = %#v, want ubuntu-24.04, GitHub's free hosted runner at the Ubuntu release the k3s block's servers run", name, fields["runs-on"])
 	}
 }
 
