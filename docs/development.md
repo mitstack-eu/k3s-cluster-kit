@@ -162,8 +162,8 @@ The last two of those jobs ran the proof with added diagnostics for the
 a renewed certificate. In both jobs, a probe run inside the container with
 `kill -0`, which tests a signal without sending one, printed
 `signal to bao pid <n>: allowed`. The container's own log, read by the next
-diagnostic, held `sh: can't kill pid <n>: Permission denied`. Which
-`ubuntu-26.04` setting causes the failure is not established. On the same day
+diagnostic, held `sh: can't kill pid <n>: Permission denied`. What makes the
+proof fail on `ubuntu-26.04` is not established. On the same day
 the proof also failed once on `ubuntu-24.04`, at a different check, for a
 reason not yet established.
 
