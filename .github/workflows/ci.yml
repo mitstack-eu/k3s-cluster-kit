@@ -28,7 +28,7 @@ defaults:
   run:
     working-directory: cluster
 
-# Every job names ubuntu-24.04, GitHub's free hosted runner: on ubuntu-latest, Ubuntu 26.04, the signal that reloads OpenBao's renewed certificate is refused and openbao-boot fails.
+# Every job runs on ubuntu-24.04, the Ubuntu release the k3s block, hcloud-k3s-cluster, creates its Cloud servers from.
 jobs:
   test:
     runs-on: ubuntu-24.04

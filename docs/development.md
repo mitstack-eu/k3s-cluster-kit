@@ -136,15 +136,24 @@ go test -run 'TestGolden' ./...
 
 `.github/workflows/ci.yml` runs on every pull request, every push to `main`
 and a manual run. Every job runs from the `cluster/` directory on
-`ubuntu-24.04`, GitHub's hosted runner, which is free for a public repository.
+`ubuntu-24.04`, one of GitHub's
+[standard hosted runners for public repositories](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+GitHub's
+[Actions billing page](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
+lists the use of standard hosted runners in a public repository as free.
 
-Keep that label when you edit the workflow. On `ubuntu-latest`, which is
-Ubuntu 26.04, the `openbao-boot` proof fails. The `tls-reload` container
-signals OpenBao to load each renewed certificate, and there the signal is
-refused with `Permission denied`, so OpenBao keeps serving its first one.
-Ubuntu 24.04 is also the release the k3s block, hcloud-k3s-cluster, creates
-its Cloud servers from. Which Ubuntu 26.04 setting refuses the signal is not
-yet established.
+Keep that label when you edit the workflow, because Ubuntu 24.04 is the release
+the k3s block, hcloud-k3s-cluster, creates its Cloud servers from.
+
+On 23 Nov 2026, `ubuntu-latest` resolved to `ubuntu-26.04`, and the
+`openbao-boot` proof failed in all three CI jobs that ran it there. In each,
+OpenBao still served its first certificate ten minutes after that certificate
+renewed. In one of them, the `tls-reload` container logged
+`signal to bao pid 17: allowed` and then
+`sh: can't kill pid 17: Permission denied`, and nothing yet reconciles those
+two lines. Which `ubuntu-26.04` setting causes the failure is not established.
+On the same day the proof also failed once on `ubuntu-24.04`, at a different
+check, for a reason not yet established.
 
 | Job | What it proves |
 |---|---|
