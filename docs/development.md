@@ -139,8 +139,9 @@ and a manual run. Every job runs from the `cluster/` directory on
 `ubuntu-24.04`, GitHub's hosted runner, which is free for a public repository.
 
 Keep that label when you edit the workflow. On `ubuntu-latest`, which is
-Ubuntu 26.04, the `openbao-boot` proof fails: OpenBao is refused the signal
-that makes it load its renewed certificate, so it keeps serving the first one.
+Ubuntu 26.04, the `openbao-boot` proof fails. The `tls-reload` container
+signals OpenBao to load each renewed certificate, and there the signal is
+refused with `Permission denied`, so OpenBao keeps serving its first one.
 Ubuntu 24.04 is also the release the k3s block, hcloud-k3s-cluster, creates
 its Cloud servers from. Which Ubuntu 26.04 setting refuses the signal is not
 yet established.

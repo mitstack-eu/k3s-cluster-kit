@@ -28,7 +28,7 @@ defaults:
   run:
     working-directory: cluster
 
-# Every job runs on GitHub's hosted ubuntu-24.04, free for a public repository, since on Ubuntu 26.04 OpenBao is refused the signal that reloads its renewed certificate and openbao-boot fails.
+# Every job names ubuntu-24.04, GitHub's free hosted runner: on ubuntu-latest, Ubuntu 26.04, the signal that reloads OpenBao's renewed certificate is refused and openbao-boot fails.
 jobs:
   test:
     runs-on: ubuntu-24.04
