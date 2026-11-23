@@ -135,9 +135,8 @@ go test -run 'TestGolden' ./...
 ## What CI runs
 
 `.github/workflows/ci.yml` runs on every pull request, every push to `main`
-and a manual run. Every job runs on the runner the repository variable
-`CI_RUNS_ON` names, `ubicloud-standard-2` by default, from the `cluster/`
-directory.
+and a manual run. Every job runs on `ubuntu-latest`, GitHub's hosted runner,
+which is free for a public repository, from the `cluster/` directory.
 
 | Job | What it proves |
 |---|---|
@@ -164,8 +163,9 @@ kyverno test admission/tests
 
 The seed tests prove the bytes a dedicated server's repository receives, and
 only a running node shows what those bytes do. The `localpv-lvm` job
-therefore runs `scripts/ci/localpv-lvm-proof.sh` as root on a Ubicloud
-runner, which is a disposable VM. The script does this, in order:
+therefore runs `scripts/ci/localpv-lvm-proof.sh` as root on the hosted
+runner, a virtual machine GitHub starts fresh for each job. The script does
+this, in order:
 
 1. It creates a 4G loop device and makes volume group `vg0` on it.
 2. It copies k3s `v1.36.3+k3s1`, the version the module pins, out of
@@ -187,8 +187,8 @@ claim and a `localpv-lvm-proof: PASS:` line for each.
 
 ### How CI proves OpenBao's boot on k3s
 
-The `openbao-boot` job runs `scripts/ci/openbao-boot-proof.sh` as root on a
-Ubicloud runner. It boots the manifests recorded in
+The `openbao-boot` job runs `scripts/ci/openbao-boot-proof.sh` as root on the
+hosted runner. It boots the manifests recorded in
 `testdata/golden/userdata-hosts-platform.yaml`, which `golden_test.go` holds
 to what `RenderUserData` writes, with the test-only keys in `testdata/boot/`.
 The script does this, in order:
