@@ -142,19 +142,30 @@ GitHub's
 [Actions billing page](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
 lists the use of standard hosted runners in a public repository as free.
 
-Keep that label when you edit the workflow, because Ubuntu 24.04 is the release
-the k3s block, hcloud-k3s-cluster, creates its Cloud servers from.
+Keep `ubuntu-24.04` when you edit the workflow, because Ubuntu 24.04 is the
+release the k3s block, hcloud-k3s-cluster, creates its Cloud servers from.
 
 On 23 Nov 2026, `ubuntu-latest` resolved to `ubuntu-26.04`, and the
-`openbao-boot` proof failed in all three CI jobs that ran it there. In each,
-the proof read the certificate OpenBao served sixty times, ten seconds apart,
-and never saw a new serial, though it sets that certificate to renew two
-minutes after each issue. In one of them, the `tls-reload` container logged
-`signal to bao pid 17: allowed` and then
-`sh: can't kill pid 17: Permission denied`, and nothing yet reconciles those
-two lines. Which `ubuntu-26.04` setting causes the failure is not established.
-On the same day the proof also failed once on `ubuntu-24.04`, at a different
-check, for a reason not yet established.
+`openbao-boot` proof failed in each of the four CI jobs that finished it there:
+[job 137624429610](https://github.com/mitstack-eu/k3s-cluster-kit/actions/runs/45154661692/job/137624429610),
+[job 137633098145](https://github.com/mitstack-eu/k3s-cluster-kit/actions/runs/45154661692/job/137633098145),
+[job 137645841786](https://github.com/mitstack-eu/k3s-cluster-kit/actions/runs/45160920545/job/137645841786)
+and
+[job 137654379990](https://github.com/mitstack-eu/k3s-cluster-kit/actions/runs/45163461260/job/137654379990).
+In each, the proof read the certificate OpenBao served once and then sixty more
+times, ten seconds apart. It never saw a new serial, though it sets that
+certificate to renew two minutes after each issue.
+
+The last two of those jobs ran the proof with added diagnostics for the
+`tls-reload` container. That container runs beside OpenBao, as
+`cluster/clusterbases/openbao/helmchart.yaml` sets out, and signals it to load
+a renewed certificate. In both jobs, a probe run inside the container with
+`kill -0`, which tests a signal without sending one, printed
+`signal to bao pid <n>: allowed`. The container's own log, read by the next
+diagnostic, held `sh: can't kill pid <n>: Permission denied`. Which
+`ubuntu-26.04` setting causes the failure is not established. On the same day
+the proof also failed once on `ubuntu-24.04`, at a different check, for a
+reason not yet established.
 
 | Job | What it proves |
 |---|---|
